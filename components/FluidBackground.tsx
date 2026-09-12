@@ -4,13 +4,22 @@ import { UIBackgroundRender } from "./background/renderer/UIBackgroundRender";
 import { WebWorkerBackgroundRender } from "./background/renderer/WebWorkerBackgroundRender";
 
 const desktopGradientDefaults = [
-  "rgb(60, 20, 80)",
-  "rgb(100, 40, 60)",
-  "rgb(20, 20, 40)",
-  "rgb(40, 40, 90)",
+  "rgb(180, 83, 9)",
+  "rgb(234, 88, 12)",
+  "rgb(120, 53, 15)",
+  "rgb(251, 191, 36)",
 ];
 
 const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+
+// 将 rgb(r,g,b) 颜色按系数微调亮度（用于呼吸动画）
+const blendColor = (color: string, factor: number): string => {
+  const match = color.match(/\d+/g);
+  if (!match || match.length < 3) return color;
+  const [r, g, b] = match.slice(0, 3).map(Number);
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return `rgb(${clamp(r * factor)}, ${clamp(g * factor)}, ${clamp(b * factor)})`;
+};
 
 const calculateTransform = (layer: FlowingLayer, elapsed: number) => {
   const progress = ((elapsed + layer.startTime) % layer.duration) / layer.duration;
@@ -138,20 +147,53 @@ const FluidBackground: React.FC<FluidBackgroundProps> = ({
     [],
   );
 
-  const renderGradientFrame = useCallback((ctx: CanvasRenderingContext2D) => {
+  // 桌面端：细腻的动态渐变（缓慢旋转 + 呼吸 + 光斑漂移）
+const renderGradientFrame = useCallback(
+  (ctx: CanvasRenderingContext2D, now: number) => {
     const width = ctx.canvas.width;
     const height = ctx.canvas.height;
     const palette =
       colorsRef.current && colorsRef.current.length > 0
         ? colorsRef.current
         : desktopGradientDefaults;
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    const sec = now / 1000;
+
+    // 渐变方向缓慢旋转（约 4 分钟一圈）
+    const angle = sec * 0.004;
+    const cx = width / 2 + Math.cos(angle) * width * 0.1;
+    const cy = height / 2 + Math.sin(angle) * height * 0.1;
+    const ex = width / 2 - Math.cos(angle) * width * 0.1;
+    const ey = height / 2 - Math.sin(angle) * height * 0.1;
+
+    const gradient = ctx.createLinearGradient(cx, cy, ex, ey);
+    // 呼吸脉动（±4% 亮度）
+    const breath = 0.96 + 0.04 * Math.sin(sec * 0.12);
     palette.forEach((color, index) => {
-      gradient.addColorStop(index / Math.max(1, palette.length - 1), color);
+      gradient.addColorStop(
+        index / Math.max(1, palette.length - 1),
+        blendColor(color, breath),
+      );
     });
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
-  }, []);
+
+    // 两团柔光缓慢漂移（细微变化）
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (let i = 0; i < 2; i++) {
+      const px = width * (0.5 + 0.32 * Math.sin(sec * 0.09 + i * 2.1));
+      const py = height * (0.5 + 0.32 * Math.cos(sec * 0.07 + i * 1.9));
+      const r = Math.min(width, height) * (0.35 + 0.12 * Math.sin(sec * 0.05 + i));
+      const glow = ctx.createRadialGradient(px, py, 0, px, py, r);
+      glow.addColorStop(0, `rgba(255,255,255,${0.045 + (i ? 0.015 : 0)})`);
+      glow.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, width, height);
+    }
+    ctx.restore();
+  },
+  [],
+);
 
   useEffect(() => {
     const resize = () => {

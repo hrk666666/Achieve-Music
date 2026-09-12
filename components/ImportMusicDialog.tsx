@@ -58,21 +58,21 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
           </div>
 
           <h3 className="text-xl font-bold text-white tracking-tight">
-            Import Music
+            导入音乐
           </h3>
           <p className="text-white/60 text-[15px] mt-2 leading-relaxed px-2">
-            Paste a song or playlist link from{" "}
+            粘贴{" "}
             <span className="text-white/90 font-medium">
-              NetEase, QQ Music, Baidu Music, Kugou Music, or Xiami Music
+              网易云、QQ 音乐、百度音乐、酷狗音乐、虾米音乐
             </span>{" "}
-            to add to queue.
+            的歌曲或歌单链接，添加到播放列表。
           </p>
 
           <input
             type="text"
             value={importUrl}
             onChange={(e) => setImportUrl(e.target.value)}
-            placeholder="https://music.163.com/... or https://y.qq.com/... or https://music.baidu.com/..."
+            placeholder="https://music.163.com/... 或 https://y.qq.com/..."
             className="w-full mt-5 bg-white/10 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:bg-white/10 transition-all text-[15px]"
             disabled={isLoading}
             autoFocus
@@ -90,7 +90,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
             onClick={handleClose}
             className="py-4 text-[17px] text-white/60 font-medium hover:bg-white/5 transition-colors active:bg-white/10"
           >
-            Cancel
+            取消
           </button>
           <button
             onClick={handleImport}
@@ -122,10 +122,10 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
-                <span>Importing...</span>
+                <span>导入中...</span>
               </>
             ) : (
-              "Import"
+              "导入"
             )}
           </button>
         </div>

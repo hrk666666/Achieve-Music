@@ -27,6 +27,9 @@ export interface Song {
   isNetease?: boolean;
   neteaseId?: string;
   album?: string;
+  // Multi-platform fallback support
+  platform?: string;
+  platformId?: string;
 }
 
 export enum PlayState {

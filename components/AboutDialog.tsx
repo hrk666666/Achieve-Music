@@ -98,7 +98,7 @@ const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => {
                             onClick={(e) => e.stopPropagation()}
                             className="flex items-center justify-between px-4 py-3 rounded-2xl border border-white/15 bg-white/5 text-sm font-medium text-white/80 hover:bg-white/10 transition"
                         >
-                            <span>☕ Buy me a Coffee</span>
+                            <span>☕ 请我喝咖啡</span>
                             <span className="text-[11px] text-white/50">↗</span>
                         </a>
                     </div>

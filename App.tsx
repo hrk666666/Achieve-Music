@@ -13,6 +13,56 @@ import { usePlayer } from "./hooks/usePlayer";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
 
+// 无歌词时的全屏播放器模式（唱片式大封面，不显示任何提示文字）
+const FullscreenPlayer: React.FC<{
+  coverUrl?: string;
+  title: string;
+  artist: string;
+  accentColor: string;
+  isPlaying: boolean;
+}> = ({ coverUrl, title, artist, accentColor, isPlaying }) => (
+  <div className="flex flex-col items-center justify-center h-full gap-8 select-none">
+    <div className="relative">
+      <div
+        className="absolute -inset-8 rounded-full blur-3xl transition-opacity duration-700"
+        style={{
+          background: accentColor,
+          opacity: 0.25,
+          animation: isPlaying ? "halo-pulse 6s ease-in-out infinite" : "none",
+        }}
+      />
+      <div
+        className={`relative w-56 h-56 md:w-72 md:h-72 rounded-full overflow-hidden ring-1 ring-white/15 shadow-2xl bg-gradient-to-br from-gray-800 to-gray-900 ${
+          isPlaying ? "animate-spin-slow" : ""
+        }`}
+      >
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt={title}
+            className="w-full h-full object-cover pointer-events-none"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/25 text-7xl">
+            ♪
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-tr from-black/25 to-transparent pointer-events-none" />
+      </div>
+      {/* 唱片中心孔 */}
+      <div className="absolute inset-0 m-auto w-9 h-9 rounded-full bg-black/70 ring-2 ring-white/25 pointer-events-none" />
+    </div>
+    <div className="text-center space-y-1.5 px-6">
+      <h2 className="text-2xl font-bold tracking-tight line-clamp-1 text-white drop-shadow-md">
+        {title}
+      </h2>
+      <p className="text-white/55 text-lg font-medium line-clamp-1">
+        {artist}
+      </p>
+    </div>
+  </div>
+);
+
 const App: React.FC = () => {
   const { toast } = useToast();
   const playlist = usePlaylist();
@@ -49,10 +99,12 @@ const App: React.FC = () => {
     pause,
     resolvedAudioSrc,
     isBuffering,
+    audioError,
   } = player;
 
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [activePanel, setActivePanel] = useState<"controls" | "lyrics">(
@@ -122,6 +174,13 @@ const App: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // 音频加载失败时给出准确中文提示
+  useEffect(() => {
+    if (audioError) {
+      toast.error(audioError);
+    }
+  }, [audioError]);
+
   const handleFileChange = async (files: FileList) => {
     const wasEmpty = playlist.queue.length === 0;
     const addedSongs = await playlist.addLocalFiles(files);
@@ -145,7 +204,7 @@ const App: React.FC = () => {
       setTimeout(() => {
         handlePlaylistAddition(result.songs, wasEmpty);
       }, 0);
-      toast.success(`Successfully imported ${result.songs.length} songs`);
+      toast.success(`成功导入 ${result.songs.length} 首歌曲`);
       return true;
     }
     return false;
@@ -238,8 +297,8 @@ const App: React.FC = () => {
           currentTime={currentTime}
           duration={duration}
           onSeek={handleSeek}
-          title={currentSong?.title || "Welcome to Kael"}
-          artist={currentSong?.artist || "Select a song"}
+          title={currentSong?.title || "欢迎使用"}
+          artist={currentSong?.artist || "请选择歌曲"}
           audioRef={audioRef}
           onNext={playNext}
           onPrev={playPrev}
@@ -249,6 +308,8 @@ const App: React.FC = () => {
           accentColor={accentColor}
           coverUrl={currentSong?.coverUrl}
           isBuffering={isBuffering}
+          onSearchClick={() => setShowSearch(true)}
+          onUploadClick={() => fileInputRef.current?.click()}
         />
 
         {/* Floating Playlist Panel */}
@@ -268,18 +329,31 @@ const App: React.FC = () => {
 
   const lyricsVersion = currentSong?.lyrics ? currentSong.lyrics.length : 0;
   const lyricsKey = currentSong ? `${currentSong.id}-${lyricsVersion}` : "no-song";
+  const hasLyrics = (currentSong?.lyrics?.length ?? 0) > 0;
 
   const lyricsSection = (
     <div className="w-full h-full relative z-20 flex flex-col justify-center px-4 lg:pl-12">
-      <LyricsView
-        key={lyricsKey}
-        lyrics={currentSong?.lyrics || []}
-        audioRef={audioRef}
-        isPlaying={playState === PlayState.PLAYING}
-        currentTime={currentTime}
-        onSeekRequest={handleSeek}
-        matchStatus={matchStatus}
-      />
+      {currentSong ? (
+        hasLyrics ? (
+          <LyricsView
+            key={lyricsKey}
+            lyrics={currentSong?.lyrics || []}
+            audioRef={audioRef}
+            isPlaying={playState === PlayState.PLAYING}
+            currentTime={currentTime}
+            onSeekRequest={handleSeek}
+            matchStatus={matchStatus}
+          />
+        ) : (
+          <FullscreenPlayer
+            coverUrl={currentSong?.coverUrl}
+            title={currentSong?.title || ""}
+            artist={currentSong?.artist || ""}
+            accentColor={accentColor}
+            isPlaying={playState === PlayState.PLAYING}
+          />
+        )
+      ) : null}
     </div>
   );
 
@@ -296,6 +370,22 @@ const App: React.FC = () => {
         coverUrl={currentSong?.coverUrl}
         isPlaying={playState === PlayState.PLAYING}
         isMobileLayout={isMobileLayout}
+      />
+
+      {/* 全局隐藏的文件选择器（顶栏和 Controls 底部按钮都用它） */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files && files.length > 0) {
+            handleFileChange(files);
+          }
+          e.target.value = "";
+        }}
+        accept="audio/*,.lrc,.txt"
+        multiple
+        className="hidden"
       />
 
       <audio

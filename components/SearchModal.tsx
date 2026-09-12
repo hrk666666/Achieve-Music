@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { SearchIcon, PlayIcon, PlusIcon } from "./Icons";
 import SmartImage from "./SmartImage";
@@ -8,7 +8,11 @@ import {
   NeteaseTrackInfo,
 } from "../services/lyricsService";
 import { useKeyboardScope } from "../hooks/useKeyboardScope";
-import { useSearchModal } from "../hooks/useSearchModal";
+import {
+  useSearchModal,
+  SearchResultItem,
+  SearchSource,
+} from "../hooks/useSearchModal";
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -88,6 +92,38 @@ const SearchModal: React.FC<SearchModalProps> = ({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 触摸长按 → 打开右键菜单
+  const startLongPress = (
+    e: React.TouchEvent,
+    item: SearchResultItem,
+    type: SearchSource,
+  ) => {
+    cancelLongPress();
+    const touch = e.touches[0];
+    if (!touch) return;
+    const { clientX, clientY } = touch;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      const fake = {
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clientX,
+        clientY,
+      } as unknown as React.MouseEvent;
+      search.openContextMenu(fake, item, type);
+    }, 500);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => () => cancelLongPress(), []);
 
   // Use search modal hook
   const search = useSearchModal({
@@ -204,8 +240,8 @@ const SearchModal: React.FC<SearchModalProps> = ({
       id: track.id,
       title: track.title,
       artist: track.artist,
-      coverUrl: track.coverUrl.replace("http:", "https:"),
-      fileUrl: getNeteaseAudioUrl(track.id),
+      coverUrl: track.coverUrl,
+      fileUrl: getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
@@ -220,8 +256,8 @@ const SearchModal: React.FC<SearchModalProps> = ({
       id: track.id,
       title: track.title,
       artist: track.artist,
-      coverUrl: track.coverUrl.replace("http:", "https:"),
-      fileUrl: getNeteaseAudioUrl(track.id),
+      coverUrl: track.coverUrl,
+      fileUrl: getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
@@ -320,8 +356,8 @@ const SearchModal: React.FC<SearchModalProps> = ({
               onChange={(e) => search.setQuery(e.target.value)}
               placeholder={
                 search.activeTab === "netease"
-                  ? "Search online..."
-                  : "Filter queue..."
+                  ? "搜索在线音乐..."
+                  : "筛选播放列表..."
               }
               className="
                         w-full pl-12 pr-4 py-3.5
@@ -348,7 +384,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
             <div className="relative flex flex-col gap-1">
               {search.queueResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 text-white/20">
-                  <span className="text-lg">No songs in queue</span>
+                  <span className="text-lg">播放列表为空</span>
                 </div>
               ) : (
                 <>
@@ -376,6 +412,9 @@ const SearchModal: React.FC<SearchModalProps> = ({
                         onContextMenu={(e) =>
                           search.openContextMenu(e, s, "queue")
                         }
+                        onTouchStart={(e) => startLongPress(e, s, "queue")}
+                        onTouchEnd={cancelLongPress}
+                        onTouchMove={cancelLongPress}
                         className={`
                                         relative z-10 group flex items-center gap-3 p-3 rounded-[10px] cursor-pointer
                                         ${search.selectedIndex === idx ? "text-white" : "hover:bg-white/5 hover:transition-colors hover:duration-150 text-white/90"}
@@ -454,21 +493,21 @@ const SearchModal: React.FC<SearchModalProps> = ({
                 <div className="flex flex-col items-center justify-center h-64 text-white/30">
                   <SearchIcon className="w-12 h-12 mb-4 opacity-20" />
                   <span className="text-base font-medium">
-                    Press{" "}
+                    按{" "}
                     <kbd className="px-2 py-1 bg-white/10 rounded text-white/60">
-                      Enter
+                      回车
                     </kbd>{" "}
-                    to search
+                    搜索
                   </span>
                 </div>
               )}
 
               {/* No results after search */}
               {search.showNeteaseEmpty && (
-                <div className="flex flex-col items-center justify-center h-64 text-white/20">
+                <div className="flex flex-col items-center justify-center h-64 text-white/30">
                   <SearchIcon className="w-12 h-12 mb-4 opacity-20" />
-                  <span className="text-base font-medium">
-                    No matches found
+                  <span className="text-base font-medium text-center px-6">
+                    {search.neteaseProvider.error || "未找到匹配结果"}
                   </span>
                 </div>
               )}
@@ -477,7 +516,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
               {search.showNeteaseLoading && (
                 <div className="flex flex-col items-center justify-center h-64 text-white/20">
                   <div className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full animate-spin mb-4"></div>
-                  <span className="text-base font-medium">Searching...</span>
+                  <span className="text-base font-medium">搜索中...</span>
                 </div>
               )}
 
@@ -486,7 +525,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                 <div className="flex flex-col items-center justify-center h-64 text-white/20">
                   <SearchIcon className="w-12 h-12 mb-4 opacity-20" />
                   <span className="text-base font-medium">
-                    Search Cloud Music
+                    搜索在线音乐
                   </span>
                 </div>
               )}
@@ -518,6 +557,9 @@ const SearchModal: React.FC<SearchModalProps> = ({
                         onContextMenu={(e) =>
                           search.openContextMenu(e, track, "netease")
                         }
+                        onTouchStart={(e) => startLongPress(e, track, "netease")}
+                        onTouchEnd={cancelLongPress}
+                        onTouchMove={cancelLongPress}
                         className={`
                                         relative z-10 group flex items-center gap-3 p-3 rounded-[10px] cursor-pointer
                                         ${search.selectedIndex === idx ? "text-white" : "hover:bg-white/5 hover:transition-colors hover:duration-150 text-white/90"}
@@ -583,7 +625,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                               }
                                         `}
                           >
-                            Cloud
+                            在线
                           </span>
                         </div>
                       </div>
@@ -597,7 +639,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                         <div className="w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
                       ) : (
                         <div className="text-white/20 text-xs">
-                          Scroll for more
+                          继续滚动加载更多
                         </div>
                       )}
                     </div>
@@ -634,7 +676,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                 className="flex items-center gap-3 px-3 py-2 text-left text-[13px] text-white/90 hover:bg-blue-500 hover:text-white rounded-lg transition-colors"
               >
                 <PlayIcon className="w-4 h-4" />
-                Play Now
+                立即播放
               </button>
 
               {search.contextMenu.type === "netease" && (
@@ -649,7 +691,7 @@ const SearchModal: React.FC<SearchModalProps> = ({
                   className="flex items-center gap-3 px-3 py-2 text-left text-[13px] text-white/90 hover:bg-blue-500 hover:text-white rounded-lg transition-colors"
                 >
                   <PlusIcon className="w-4 h-4" />
-                  Add to Queue
+                  添加到队列
                 </button>
               )}
             </div>,

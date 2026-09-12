@@ -10,6 +10,7 @@
     "test": "bun test tests"
   },
   "dependencies": {
+    "@meting/core": "^1.6.1",
     "@react-spring/web": "^10.0.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

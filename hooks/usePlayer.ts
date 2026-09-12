@@ -180,6 +180,7 @@ export const usePlayer = ({
     if (!audioRef.current) return;
     const value = audioRef.current.duration;
     setDuration(Number.isFinite(value) ? value : 0);
+    setAudioError(null);
     if (playState === PlayState.PLAYING) {
       audioRef.current
         .play()
@@ -410,6 +411,7 @@ export const usePlayer = ({
       audio.currentTime = 0;
       setPlayState(PlayState.PAUSED);
       setCurrentTime(0);
+      setAudioError("音频加载失败：可能是网络连接问题，或该歌曲需要 VIP 权限。已自动停止播放。");
     };
 
     audio.addEventListener("error", handleAudioError);
@@ -493,6 +495,7 @@ export const usePlayer = ({
   const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
   const [bufferProgress, setBufferProgress] = useState(0);
+  const [audioError, setAudioError] = useState<string | null>(null);
 
   const handleSetSpeed = useCallback((newSpeed: number) => {
     setSpeed(newSpeed);
@@ -535,6 +538,7 @@ export const usePlayer = ({
     }
 
     const fileUrl = currentSong.fileUrl;
+    setAudioError(null);
 
     // Already a blob or data URL - use directly
     if (fileUrl.startsWith("blob:") || fileUrl.startsWith("data:")) {
@@ -673,5 +677,6 @@ export const usePlayer = ({
     resolvedAudioSrc,
     isBuffering,
     bufferProgress,
+    audioError,
   };
 };

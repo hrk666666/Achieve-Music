@@ -12,6 +12,8 @@ import {
   PrevIcon,
   NextIcon,
   QueueIcon,
+  SearchIcon,
+  CloudUploadIcon,
 } from "./Icons";
 import { PlayMode } from "../types";
 
@@ -32,6 +34,8 @@ interface ControlsProps {
   accentColor: string;
   coverUrl?: string;
   isBuffering: boolean;
+  onSearchClick?: () => void;
+  onUploadClick?: () => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -51,6 +55,8 @@ const Controls: React.FC<ControlsProps> = ({
   accentColor,
   coverUrl,
   isBuffering,
+  onSearchClick,
+  onUploadClick,
 }) => {
 
   // Progress bar seeking state
@@ -271,7 +277,7 @@ const Controls: React.FC<ControlsProps> = ({
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20">
             <div className="text-8xl mb-4">♪</div>
-            <p className="text-sm">No Music Loaded</p>
+            <p className="text-sm">未加载音乐</p>
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
@@ -367,26 +373,32 @@ const Controls: React.FC<ControlsProps> = ({
         </span>
       </div>
 
-      {/* Controls Row - Flattened for Equal Spacing */}
-      {/* Layout: [Mode] [Vol] [Prev] [Play] [Next] [Settings] [List] */}
-      <div className="w-full max-w-[380px] mt-2 md:mt-6 px-2">
+      {/* Controls Row */}
+      <div className="w-full max-w-[420px] mt-2 md:mt-6 px-2">
         <div className="flex items-center justify-between w-full">
-          {/* 1. Play Mode */}
+          {/* 1. 搜索 */}
+          <button
+            onClick={onSearchClick}
+            className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors active:scale-90 duration-150"
+            title="搜索 (Ctrl+K)"
+          >
+            <SearchIcon className="w-5 h-5" />
+          </button>
+
+          {/* 2. Play Mode */}
           <button
             onClick={onToggleMode}
-            className="p-2 rounded-full hover:bg-white/10 transition-colors"
-            title="Playback Mode"
+            className="p-2 rounded-full hover:bg-white/10 transition-colors active:scale-90 duration-150"
+            title="播放模式"
           >
             {getModeIcon()}
           </button>
 
-
-
           {/* 3. Previous */}
           <button
             onClick={onPrev}
-            className="text-white hover:text-white/70 transition-colors active:scale-90 duration-200"
-            aria-label="Previous"
+            className="text-white hover:text-white/70 transition-colors active:scale-90 duration-150"
+            aria-label="上一首"
           >
             <PrevIcon className="w-9 h-9" />
           </button>
@@ -394,7 +406,7 @@ const Controls: React.FC<ControlsProps> = ({
           {/* 4. Play/Pause (Center) */}
           <button
             onClick={onPlayPause}
-            className="w-14 h-14 flex items-center justify-center rounded-full bg-white text-black hover:scale-105 active:scale-95 transition-transform duration-200 shadow-lg shadow-white/10"
+            className="w-14 h-14 flex items-center justify-center rounded-full bg-white text-black hover:scale-105 active:scale-95 active:brightness-90 transition-transform duration-150 shadow-lg shadow-white/10"
           >
             <div className="relative w-6 h-6">
               {/* Pause Icon */}
@@ -417,21 +429,28 @@ const Controls: React.FC<ControlsProps> = ({
           {/* 5. Next */}
           <button
             onClick={onNext}
-            className="text-white hover:text-white/70 transition-colors active:scale-90 duration-200"
-            aria-label="Next"
+            className="text-white hover:text-white/70 transition-colors active:scale-90 duration-150"
+            aria-label="下一首"
           >
             <NextIcon className="w-9 h-9" />
           </button>
 
-
-
-          {/* 7. Playlist/Queue */}
+          {/* 6. Playlist */}
           <button
             onClick={onTogglePlaylist}
-            className="p-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-            title="Queue"
+            className="p-2 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white active:scale-90 duration-150"
+            title="播放列表"
           >
             <QueueIcon className="w-5 h-5" />
+          </button>
+
+          {/* 7. 上传 */}
+          <button
+            onClick={onUploadClick}
+            className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors active:scale-90 duration-150"
+            title="导入本地音乐"
+          >
+            <CloudUploadIcon className="w-5 h-5" />
           </button>
         </div>
       </div>

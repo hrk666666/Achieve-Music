@@ -22,49 +22,9 @@ export const shuffleArray = <T>(array: T[]): T[] => {
   return newArr;
 };
 
-// Helper to request via CORS proxy (api.allorigins.win is reliable for GET requests)
-// Try direct request first, fallback to proxy if CORS fails
-export const fetchViaProxy = async (targetUrl: string): Promise<any> => {
-  let text: string;
-
-  // 1. Try direct request first
-  try {
-    const response = await fetch(targetUrl);
-    if (!response.ok) {
-      throw new Error(
-        `Direct fetch failed with status: ${response.status} ${targetUrl}`,
-      );
-    }
-    text = await response.text();
-    return JSON.parse(text);
-  } catch (directError) {
-    // 2. Direct request failed (likely CORS), try proxy
-
-
-    try {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) {
-        throw new Error(`Proxy fetch failed with status: ${response.status}`);
-      }
-      text = await response.text();
-      return JSON.parse(text);
-    } catch (proxyError) {
-
-      throw proxyError;
-    }
-  }
-};
-
-// Proxy configurations for image fetching
-const IMAGE_PROXIES = [
-  (url: string) => `https://images.weserv.nl/?url=${encodeURIComponent(url)}`,
-  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
-];
-
-// Helper to fetch images with CORS handling using reliable proxy
+// Helper to fetch images（同源图片直连，无需代理）
 export const fetchImageViaProxy = async (targetUrl: string): Promise<Blob> => {
-  // Try direct request first (works for most cases like NetEase)
+  // Try direct request first (works for most cases)
   try {
     const response = await fetch(targetUrl, {
       mode: 'cors',
@@ -77,26 +37,7 @@ export const fetchImageViaProxy = async (targetUrl: string): Promise<Blob> => {
 
   }
 
-  // For all images that failed direct fetch, try reliable proxies
-
-  
-  for (const proxyFactory of IMAGE_PROXIES) {
-    try {
-      const proxyUrl = proxyFactory(targetUrl);
-      const response = await fetch(proxyUrl, {
-        mode: 'cors',
-        cache: 'force-cache'
-      });
-      
-      if (response.ok) {
-        return await response.blob();
-      }
-    } catch (error) {
-
-    }
-  }
-
-  // Final fallback: Try with Image object and canvas (works for some cases)
+  // Final fallback: Try with Image object and canvas
   return new Promise<Blob>((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';

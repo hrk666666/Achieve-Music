@@ -9,7 +9,7 @@ interface FlowingLayer {
   startTime: number;
 }
 
-const defaultColors = ["#8b5cf6", "#ec4899", "#f97316", "#3b82f6"];
+const defaultColors = ["#f97316", "#fbbf24", "#f59e0b", "#ea580c"];
 
 const MESH_FLOATS = [
   -0.2351, -0.0967, 0.2135, -0.1414, 0.9221, -0.0908, 0.9221, -0.0685, 1.3027,

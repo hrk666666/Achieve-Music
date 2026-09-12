@@ -155,7 +155,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={toggleFullscreen}
             className="hidden sm:flex w-10 h-10 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/80 hover:bg-white/20 hover:text-white transition-all shadow-sm"
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            title={isFullscreen ? "退出全屏" : "进入全屏"}
           >
             <FullscreenIcon className="w-5 h-5" isFullscreen={isFullscreen} />
           </button>

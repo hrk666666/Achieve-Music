@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Song } from "../types";
 import {
   extractColors,
@@ -15,6 +15,78 @@ import {
   TrackInfo,
 } from "../services/lyricsService";
 import { audioResourceCache } from "../services/cache";
+
+const STORAGE_KEY = "kael-music:playlist";
+
+// 从 Song 中提取可持久化的数据（排除 blob: URL 等刷新即失效的字段）
+const serializeSong = (song: Song): Record<string, unknown> | null => {
+  // 本地文件的 blob: URL 刷新即失效，跳过
+  if (song.fileUrl?.startsWith("blob:")) return null;
+  return {
+    id: song.id,
+    title: song.title,
+    artist: song.artist,
+    neteaseId: song.neteaseId,
+    platform: song.platform,
+    platformId: song.platformId,
+    coverUrl: song.coverUrl,
+    lyrics: song.lyrics,
+    colors: song.colors,
+    needsLyricsMatch: song.needsLyricsMatch,
+    isNetease: song.isNetease,
+  };
+};
+
+const deserializeSong = (data: Record<string, unknown>): Song => {
+  const song: Song = {
+    id: data.id as string,
+    title: data.title as string,
+    artist: data.artist as string,
+    fileUrl: data.neteaseId
+      ? getNeteaseAudioUrl(data.neteaseId as string)
+      : data.platformId && data.platform
+        ? getAudioUrl(data.platform as string, data.platformId as string)
+        : undefined,
+    neteaseId: data.neteaseId as string | undefined,
+    platform: data.platform as string | undefined,
+    platformId: data.platformId as string | undefined,
+    coverUrl: data.coverUrl as string | undefined,
+    lyrics: (data.lyrics as Song["lyrics"]) || [],
+    colors: (data.colors as string[] | undefined) || [],
+    needsLyricsMatch: (data.needsLyricsMatch as boolean) ?? false,
+    isNetease: (data.isNetease as boolean) ?? false,
+  };
+  return song;
+};
+
+const loadFromStorage = (): { queue: Song[]; originalQueue: Song[] } => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { queue: [], originalQueue: [] };
+    const parsed = JSON.parse(raw);
+    const queue: Song[] = (parsed.queue || [])
+      .map(deserializeSong)
+      .filter((s) => !!s.fileUrl);
+    const originalQueue: Song[] = (parsed.originalQueue || [])
+      .map(deserializeSong)
+      .filter((s) => !!s.fileUrl);
+    return { queue, originalQueue };
+  } catch {
+    return { queue: [], originalQueue: [] };
+  }
+};
+
+const saveToStorage = (queue: Song[], originalQueue: Song[]) => {
+  try {
+    const data = {
+      queue: queue.map(serializeSong).filter(Boolean),
+      originalQueue: originalQueue.map(serializeSong).filter(Boolean),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // localStorage 不可用时静默失败
+  }
+};
 
 // Levenshtein distance for fuzzy matching
 const levenshteinDistance = (str1: string, str2: string): number => {
@@ -58,8 +130,14 @@ export interface ImportResult {
 }
 
 export const usePlaylist = () => {
-  const [queue, setQueue] = useState<Song[]>([]);
-  const [originalQueue, setOriginalQueue] = useState<Song[]>([]);
+  const initial = loadFromStorage();
+  const [queue, setQueue] = useState<Song[]>(initial.queue);
+  const [originalQueue, setOriginalQueue] = useState<Song[]>(initial.originalQueue);
+
+  // 持久化到 localStorage（排除 blob: 本地文件）
+  useEffect(() => {
+    saveToStorage(queue, originalQueue);
+  }, [queue, originalQueue]);
 
   const updateSongInQueue = useCallback(
     (id: string, updates: Partial<Song>) => {
@@ -235,7 +313,7 @@ export const usePlaylist = () => {
         return {
           success: false,
           message:
-            "Invalid URL. Supported platforms: NetEase, QQ Music, Baidu Music, Kugou Music, Xiami Music",
+            "链接格式不支持。支持：网易云音乐、QQ音乐、酷狗音乐、酷我音乐、百度音乐",
           songs: [],
         };
       }
@@ -284,7 +362,7 @@ export const usePlaylist = () => {
       } catch (err) {
         return {
           success: false,
-          message: "Failed to load songs from URL",
+          message: "无法从链接加载歌曲，请检查链接是否正确",
           songs: [],
         };
       }
@@ -293,7 +371,7 @@ export const usePlaylist = () => {
       if (newSongs.length === 0) {
         return {
           success: false,
-          message: "Failed to load songs from URL",
+          message: "无法从链接加载歌曲，请检查链接是否正确",
           songs: [],
         };
       }

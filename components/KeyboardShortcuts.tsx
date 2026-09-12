@@ -149,10 +149,10 @@ return createPortal(
           <div className="flex items-center gap-4 mb-8">
             <div className="flex-1">
               <h2 className="text-2xl font-bold tracking-tight">
-                Keyboard Shortcuts
+                键盘快捷键
               </h2>
               <p className="text-white/50 font-medium">
-                Quick controls for playback
+                快速控制播放
               </p>
             </div>
             <button
@@ -178,23 +178,23 @@ return createPortal(
 
           {/* Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
-            <ShortcutItem keys={["Space"]} label="Play / Pause" />
-            <ShortcutItem keys={["L"]} label="Loop Mode" />
-            <ShortcutItem keys={["←", "→"]} label="Seek ±5s" />
-            <ShortcutItem keys={["Ctrl", "←/→"]} label="Prev / Next Song" />
+            <ShortcutItem keys={["Space"]} label="播放 / 暂停" />
+            <ShortcutItem keys={["L"]} label="循环模式" />
+            <ShortcutItem keys={["←", "→"]} label="快退 / 快进 5 秒" />
+            <ShortcutItem keys={["Ctrl", "←/→"]} label="上一首 / 下一首" />
 
-            <ShortcutItem keys={["Ctrl", "K"]} label="Search" />
-            <ShortcutItem keys={["Ctrl", "P"]} label="Toggle Playlist" />
-            <ShortcutItem keys={["Ctrl", "/"]} label="Toggle Shortcuts" />
+            <ShortcutItem keys={["Ctrl", "K"]} label="搜索" />
+            <ShortcutItem keys={["Ctrl", "P"]} label="播放列表" />
+            <ShortcutItem keys={["Ctrl", "/"]} label="查看快捷键" />
           </div>
 
           {/* Footer Hint */}
           <div className="mt-8 pt-6 border-t border-white/5 text-center text-white/30 text-xs font-medium tracking-wider uppercase">
-            Press{" "}
+            按{" "}
             <kbd className="font-sans bg-white/10 px-1.5 py-0.5 rounded mx-1 text-white/60">
               Esc
             </kbd>{" "}
-            to close
+            关闭
           </div>
         </div>
       </div>

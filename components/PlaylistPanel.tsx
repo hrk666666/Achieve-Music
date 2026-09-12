@@ -213,8 +213,8 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                     {/* iOS 18 Style Header */}
                     <div className="px-5 pt-5 pb-3 shrink-0 flex items-center justify-between bg-transparent border-b border-white/5">
                         <div className="flex flex-col">
-                            <h3 className="text-white text-lg font-bold leading-none tracking-tight">Playing Next</h3>
-                            <span className="text-white/40 text-xs font-medium mt-1">{queue.length} Songs</span>
+                            <h3 className="text-white text-lg font-bold leading-none tracking-tight">正在播放</h3>
+                            <span className="text-white/40 text-xs font-medium mt-1">{queue.length} 首歌曲</span>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -239,7 +239,7 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                                         onClick={() => setIsEditing(false)}
                                         className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:bg-white/10"
                                         style={{ color: accentColor }}
-                                        title="Done"
+                                        title="完成"
                                     >
                                         <CheckIcon className="w-5 h-5" />
                                     </button>
@@ -273,7 +273,7 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                     >
                         {queue.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-32 text-white/30 space-y-2">
-                                <p className="text-xs font-medium">Queue is empty</p>
+                                <p className="text-xs font-medium">播放列表为空</p>
                             </div>
                         ) : (
                             <div style={{ height: `${totalHeight}px`, position: 'relative' }}>

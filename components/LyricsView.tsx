@@ -487,19 +487,9 @@ const LyricsView: React.FC<LyricsViewProps> = ({
     }
   };
 
+  // 无歌词时返回空，由 App 层渲染全屏播放器模式（不显示任何提示文字）
   if (!lyrics.length) {
-    return (
-      <div className="h-[85vh] lg:h-[65vh] flex flex-col items-center justify-center text-white/40 select-none">
-        {matchStatus === "matching" ? (
-          <div className="animate-pulse">Syncing Lyrics...</div>
-        ) : (
-          <>
-            <div className="text-4xl mb-4 opacity-50">♪</div>
-            <div>Play music to view lyrics</div>
-          </>
-        )}
-      </div>
-    );
+    return null;
   }
 
   // Manual wheel event attachment to fix passive listener warning

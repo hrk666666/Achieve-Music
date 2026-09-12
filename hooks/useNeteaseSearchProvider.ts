@@ -11,6 +11,7 @@ export interface NeteaseSearchProviderExtended extends SearchProvider {
   performSearch: (query: string) => Promise<void>;
   hasSearched: boolean;
   results: NeteaseTrackInfo[];
+  error: string | null;
 }
 
 export const useNeteaseSearchProvider = (): NeteaseSearchProviderExtended => {
@@ -18,11 +19,13 @@ export const useNeteaseSearchProvider = (): NeteaseSearchProviderExtended => {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setResults([]);
       setHasSearched(false);
+      setError(null);
       return;
     }
 
@@ -30,6 +33,7 @@ export const useNeteaseSearchProvider = (): NeteaseSearchProviderExtended => {
     setHasSearched(true);
     setResults([]);
     setHasMore(true);
+    setError(null);
 
     try {
       const searchResults = await searchNetEase(query, {
@@ -38,7 +42,13 @@ export const useNeteaseSearchProvider = (): NeteaseSearchProviderExtended => {
       })
       setResults(searchResults);
       setHasMore(searchResults.length >= LIMIT);
+      // 结果为空时区分"无结果"与"网络异常"：searchNetEase 内部 catch 后返回空数组，
+      // 这里通过再次确认是否真的网络不通来给出准确提示
+      if (searchResults.length === 0) {
+        setError("未找到匹配结果，或网络连接失败，请检查网络后重试");
+      }
     } catch (e) {
+      setError("网络连接失败，请检查网络后重试");
       setHasMore(false);
     } finally {
       setIsLoading(false);
@@ -74,12 +84,13 @@ export const useNeteaseSearchProvider = (): NeteaseSearchProviderExtended => {
 
   const provider: NeteaseSearchProviderExtended = {
     id: "netease",
-    label: "Cloud Music",
+    label: "在线音乐",
     requiresExplicitSearch: true,
     isLoading,
     hasMore,
     hasSearched,
     results,
+    error,
 
     search: async (query: string): Promise<SearchResultItem[]> => {
       // For explicit search providers, this returns current results

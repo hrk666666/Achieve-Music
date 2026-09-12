@@ -12,7 +12,7 @@ export const useQueueSearchProvider = ({
   const provider: SearchProvider = useMemo(
     () => ({
       id: "queue",
-      label: "Current Queue",
+      label: "当前播放队列",
       requiresExplicitSearch: false,
       isLoading: false,
       hasMore: false,
