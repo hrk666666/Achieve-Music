@@ -25,3 +25,8 @@ dist-ssr
 
 tests/*
 bun.lock
+
+# Tauri
+src-tauri/target
+src-tauri/gen
+release
