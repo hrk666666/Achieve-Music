@@ -11,7 +11,6 @@ import { usePlaylist } from "./hooks/usePlaylist";
 import { usePlayer } from "./hooks/usePlayer";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
-import BigScreenPlayer from "./components/BigScreenPlayer";
 
 // 无歌词时的全屏播放器模式（唱片式大封面，不显示任何提示文字）
 const FullscreenPlayer: React.FC<{
@@ -105,7 +104,6 @@ const App: React.FC = () => {
 
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [isBigScreen, setIsBigScreen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -348,7 +346,6 @@ const App: React.FC = () => {
           isBuffering={isBuffering}
           onSearchClick={() => setShowSearch(true)}
           onUploadClick={() => fileInputRef.current?.click()}
-          onBigScreenClick={() => setIsBigScreen(true)}
         />
 
         {/* Floating Playlist Panel */}
@@ -489,23 +486,6 @@ const App: React.FC = () => {
         isPlaying={playState === PlayState.PLAYING}
         accentColor={accentColor}
       />
-
-      {/* 大屏幕模式 */}
-      {isBigScreen && (
-        <BigScreenPlayer
-          queue={playlist.queue}
-          currentSong={currentSong}
-          currentIndex={currentIndex}
-          isPlaying={playState === PlayState.PLAYING}
-          currentTime={currentTime}
-          duration={duration}
-          accentColor={accentColor}
-          lyrics={currentSong?.lyrics || []}
-          onPlayIndex={playIndex}
-          onClose={() => setIsBigScreen(false)}
-          audioRef={audioRef}
-        />
-      )}
 
       {/* Main Content Split */}
       {isMobileLayout ? (

@@ -14,7 +14,6 @@ import {
   QueueIcon,
   SearchIcon,
   CloudUploadIcon,
-  ExpandIcon,
 } from "./Icons";
 import { PlayMode } from "../types";
 
@@ -37,7 +36,6 @@ interface ControlsProps {
   isBuffering: boolean;
   onSearchClick?: () => void;
   onUploadClick?: () => void;
-  onBigScreenClick?: () => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
@@ -59,7 +57,6 @@ const Controls: React.FC<ControlsProps> = ({
   isBuffering,
   onSearchClick,
   onUploadClick,
-  onBigScreenClick,
 }) => {
 
   // Progress bar seeking state
@@ -454,15 +451,6 @@ const Controls: React.FC<ControlsProps> = ({
             title="导入本地音乐"
           >
             <CloudUploadIcon className="w-5 h-5" />
-          </button>
-
-          {/* 8. 大屏幕模式 */}
-          <button
-            onClick={onBigScreenClick}
-            className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors active:scale-90 duration-150"
-            title="大屏幕模式"
-          >
-            <ExpandIcon className="w-5 h-5" />
           </button>
         </div>
       </div>
