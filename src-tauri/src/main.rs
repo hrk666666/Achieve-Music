@@ -439,7 +439,7 @@ fn main() {
 
     tauri::Builder::default()
         .setup(move |app| {
-            let win = app.get_window("main").unwrap();
+            let win = app.get_webview_window("main").unwrap();
             let _ = win.set_fullscreen(true);
             let _ = win.eval(&format!("window.location.replace('{}')", url));
             Ok(())
@@ -474,7 +474,7 @@ body{{font-family:"Segoe UI","Microsoft YaHei",sans-serif;background:#0a0a0f;col
 .line{{color:#9ca3af}}.line.ok{{color:#10b981}}.line.warn{{color:#f59e0b}}.line.url{{color:#60a5fa}}
 .footer{{margin-top:16px;display:flex;gap:8px}}
 .btn{{flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .2s}}
-.btn:hover{{opacity:.85}}.btn-primary{{background:#10b981;color:#000}}.btn-secondary{{background:#1f1f2e;color:#e5e7eb}}
+.btn:hover{{opacity:.85}}.btn-primary{{background:#10b981;color:#000}}
 </style></head><body>
 <div class="header"><div class="logo">♪</div><div><div class="title">Achieve Music</div><div class="subtitle">本地音乐服务</div></div></div>
 <div class="status-box" id="log"></div>
@@ -482,20 +482,19 @@ body{{font-family:"Segoe UI","Microsoft YaHei",sans-serif;background:#0a0a0f;col
 <script>
 const port={port};const log=document.getElementById('log');
 function addLine(text,cls){{const d=document.createElement('div');d.className='line'+(cls?' '+cls:'');d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight}}
-function openBrowser(){{window.fetch('__TAURI__shell__open__'+JSON.stringify('http://localhost:'+port))}}
+function openBrowser(){{window.location.href='http://localhost:'+port}}
 addLine('[启动] 服务地址: http://localhost:'+port,'url');
 addLine('[启动] 浏览器将自动打开...','ok');
 addLine('[提示] 关闭本窗口将停止服务','warn');
 </script></body></html>"#
     );
 
-    // 用 data URL 加载控制台
     let console_data_url = "data:text/html;charset=utf-8,".to_string();
     console_data_url.push_str(&urlencoding::encode(&console_html));
 
     tauri::Builder::default()
         .setup(move |app| {
-            let win = app.get_window("main").unwrap();
+            let win = app.get_webview_window("main").unwrap();
             let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: 480, height: 320 }));
             let _ = win.set_resizable(false);
             let _ = win.set_title("Achieve Music 服务控制台");
@@ -504,7 +503,20 @@ addLine('[提示] 关闭本窗口将停止服务','warn');
             let url2 = url.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(800)).await;
-                let _ = tauri::api::shell::open(&url2, None);
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "start", "", &url2])
+                        .spawn();
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = std::process::Command::new("open").arg(&url2).spawn();
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    let _ = std::process::Command::new("xdg-open").arg(&url2).spawn();
+                }
             });
             Ok(())
         })
