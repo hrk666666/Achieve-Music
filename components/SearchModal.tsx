@@ -376,9 +376,9 @@ const SearchModal: React.FC<SearchModalProps> = ({
             {search.activeTab === "netease" && (
               <button
                 onClick={() => {
-                  // 触发搜索 —— 复用 Enter 键逻辑
-                  const fakeEnter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
-                  inputRef.current?.dispatchEvent(fakeEnter);
+                  if (search.query.trim()) {
+                    search.performNeteaseSearch();
+                  }
                 }}
                 disabled={!search.query.trim()}
                 className="px-5 py-3.5 rounded-[12px] font-medium text-sm
