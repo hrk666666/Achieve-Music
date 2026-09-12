@@ -298,9 +298,10 @@ const SearchModal: React.FC<SearchModalProps> = ({
       <div
         className={`
         relative w-full max-w-[720px] h-[600px]
-        bg-black/40 backdrop-blur-2xl saturate-150
-        rounded-[20px]
-        shadow-[0_50px_100px_-12px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.1)]
+        bg-black/10 backdrop-blur-[100px] saturate-150
+        rounded-[32px]
+        shadow-[0_20px_50px_rgba(0,0,0,0.3)]
+        border border-white/5
         flex flex-col overflow-hidden
         ${isClosing ? "macos-modal-out" : "macos-modal-in"}
         text-white

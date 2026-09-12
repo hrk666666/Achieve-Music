@@ -48,7 +48,7 @@ const ImportMusicDialog: React.FC<ImportMusicDialogProps> = ({
 
       {/* Modal */}
       <div
-        className="relative w-full max-w-[360px] bg-black/20 backdrop-blur-[80px] saturate-150 border border-white/10 rounded-[28px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 scale-100 ring-1 ring-white/5"
+        className="relative w-full max-w-[360px] bg-black/10 backdrop-blur-[100px] saturate-150 border border-white/5 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden animate-in zoom-in-95 duration-300 scale-100 ring-1 ring-white/5"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Content */}

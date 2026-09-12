@@ -11,6 +11,9 @@ import { usePlaylist } from "./hooks/usePlaylist";
 import { usePlayer } from "./hooks/usePlayer";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
+import SplashScreen from "./components/SplashScreen";
+
+const SPLASH_KEY = "achieve_music_splash_seen";
 
 // 无歌词时的全屏播放器模式（唱片式大封面，不显示任何提示文字）
 const FullscreenPlayer: React.FC<{
@@ -104,6 +107,9 @@ const App: React.FC = () => {
 
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showSplash, setShowSplash] = useState(() => {
+    try { return !localStorage.getItem(SPLASH_KEY); } catch { return true; }
+  });
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -536,6 +542,9 @@ const App: React.FC = () => {
           {lyricsSection}
         </div>
       )}
+
+      {/* 启动欢迎页 */}
+      {showSplash && <SplashScreen onDismiss={() => setShowSplash(false)} />}
     </div>
   );
 };
