@@ -55,6 +55,10 @@ export const useCanvasRenderer = ({ onRender }: UseCanvasRendererProps) => {
         handleResize();
         window.addEventListener("resize", handleResize);
 
+        // 用 ResizeObserver 监听 canvas 自身尺寸——解决首次 mount 时 parent 还没布局完的问题
+        const resizeObserver = new ResizeObserver(() => handleResize());
+        resizeObserver.observe(canvas);
+
         const animate = (time: number) => {
             if (previousTimeRef.current !== undefined) {
                 const deltaTime = time - previousTimeRef.current;
