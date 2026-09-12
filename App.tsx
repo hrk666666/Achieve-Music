@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useToast } from "./hooks/useToast";
 import { PlayState, Song } from "./types";
 import FluidBackground from "./components/FluidBackground";
@@ -6,12 +6,12 @@ import Controls from "./components/Controls";
 import LyricsView from "./components/LyricsView";
 import PlaylistPanel from "./components/PlaylistPanel";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
-import TopBar from "./components/TopBar";
 import SearchModal from "./components/SearchModal";
 import { usePlaylist } from "./hooks/usePlaylist";
 import { usePlayer } from "./hooks/usePlayer";
 import { keyboardRegistry } from "./services/keyboardRegistry";
 import MediaSessionController from "./components/MediaSessionController";
+import BigScreenPlayer from "./components/BigScreenPlayer";
 
 // 无歌词时的全屏播放器模式（唱片式大封面，不显示任何提示文字）
 const FullscreenPlayer: React.FC<{
@@ -93,6 +93,7 @@ const App: React.FC = () => {
     handlePlaylistAddition,
     loadLyricsFile,
     playIndex,
+    currentIndex,
     addSongAndPlay,
     handleAudioEnded,
     play,
@@ -104,6 +105,8 @@ const App: React.FC = () => {
 
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [isBigScreen, setIsBigScreen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isMobileLayout, setIsMobileLayout] = useState(false);
@@ -190,6 +193,41 @@ const App: React.FC = () => {
       }, 0);
     }
   };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer?.types.includes("Files")) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      // 只处理音频/歌词文件
+      const audioFiles = Array.from(files).filter(
+        (f) =>
+          f.type.startsWith("audio/") ||
+          f.name.endsWith(".lrc") ||
+          f.name.endsWith(".txt"),
+      );
+      if (audioFiles.length > 0) {
+        const dt = new DataTransfer();
+        audioFiles.forEach((f) => dt.items.add(f));
+        handleFileChange(dt.files);
+        toast.success(`添加 ${audioFiles.length} 个文件`);
+      } else {
+        toast.error("拖入的文件不支持");
+      }
+    }
+  }, [toast]);
 
   const handleImportUrl = async (input: string): Promise<boolean> => {
     const trimmed = input.trim();
@@ -310,6 +348,7 @@ const App: React.FC = () => {
           isBuffering={isBuffering}
           onSearchClick={() => setShowSearch(true)}
           onUploadClick={() => fileInputRef.current?.click()}
+          onBigScreenClick={() => setIsBigScreen(true)}
         />
 
         {/* Floating Playlist Panel */}
@@ -363,7 +402,12 @@ const App: React.FC = () => {
   const mobileTranslate = baseOffset + dragOffsetX;
 
   return (
-    <div className="relative w-full h-screen flex flex-col overflow-hidden">
+    <div
+      className="relative w-full h-screen flex flex-col overflow-hidden"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <FluidBackground
         key={isMobileLayout ? "mobile" : "desktop"}
         colors={currentSong?.colors || []}
@@ -371,6 +415,17 @@ const App: React.FC = () => {
         isPlaying={playState === PlayState.PLAYING}
         isMobileLayout={isMobileLayout}
       />
+
+      {/* 拖拽 overlay */}
+      {isDragOver && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
+          <div className="px-10 py-16 rounded-2xl border-2 border-dashed border-white/40 bg-white/5 text-center">
+            <div className="text-5xl mb-4">📁</div>
+            <div className="text-xl font-semibold text-white">松开添加音乐</div>
+            <div className="text-sm text-white/60 mt-1">支持拖入 .mp3 .flac .wav .lrc 等</div>
+          </div>
+        </div>
+      )}
 
       {/* 全局隐藏的文件选择器（顶栏和 Controls 底部按钮都用它） */}
       <input
@@ -422,12 +477,6 @@ const App: React.FC = () => {
         onSeek={handleSeek}
       />
 
-      {/* Top Bar */}
-      <TopBar
-        onFilesSelected={handleFileChange}
-        onSearchClick={() => setShowSearch(true)}
-      />
-
       {/* Search Modal - Always rendered to preserve state, visibility handled internally */}
       <SearchModal
         isOpen={showSearch}
@@ -440,6 +489,23 @@ const App: React.FC = () => {
         isPlaying={playState === PlayState.PLAYING}
         accentColor={accentColor}
       />
+
+      {/* 大屏幕模式 */}
+      {isBigScreen && (
+        <BigScreenPlayer
+          queue={playlist.queue}
+          currentSong={currentSong}
+          currentIndex={currentIndex}
+          isPlaying={playState === PlayState.PLAYING}
+          currentTime={currentTime}
+          duration={duration}
+          accentColor={accentColor}
+          lyrics={currentSong?.lyrics || []}
+          onPlayIndex={playIndex}
+          onClose={() => setIsBigScreen(false)}
+          audioRef={audioRef}
+        />
+      )}
 
       {/* Main Content Split */}
       {isMobileLayout ? (
