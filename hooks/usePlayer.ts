@@ -218,10 +218,63 @@ export const usePlayer = ({
   const playIndex = useCallback(
     (index: number) => {
       if (index < 0 || index >= queue.length) return;
-      pauseAndResetCurrentAudio();
-      setCurrentIndex(index);
-      setPlayState(PlayState.PLAYING);
-      setMatchStatus("idle");
+      const audio = audioRef.current;
+      const wasPlaying = audio && !audio.paused;
+
+      // 如果正在播放，先淡出旧歌（平滑过渡）
+      if (wasPlaying) {
+        const fadeDuration = 150;
+        const startVolume = audio.volume;
+        const startTime = performance.now();
+        const fadeOut = () => {
+          const elapsed = performance.now() - startTime;
+          const ratio = Math.min(elapsed / fadeDuration, 1);
+          audio.volume = startVolume * (1 - ratio);
+          if (ratio < 1) {
+            requestAnimationFrame(fadeOut);
+          } else {
+            // 淡出完成，切换并淡入
+            audio.volume = startVolume;
+            pauseAndResetCurrentAudio();
+            setCurrentIndex(index);
+            setPlayState(PlayState.PLAYING);
+            setMatchStatus("idle");
+            // 新歌加载完自动播放并淡入（由 onLoadedMetadata 处理）
+            audio.volume = 0;
+            const tryFadeIn = () => {
+              if (!audio.paused) {
+                audio.play().catch(() => {});
+                const fiStart = performance.now();
+                const fiDur = 300;
+                const fadeInStep = () => {
+                  const e = performance.now() - fiStart;
+                  const r = Math.min(e / fiDur, 1);
+                  audio.volume = r;
+                  if (r < 1) requestAnimationFrame(fadeInStep);
+                };
+                fadeInStep();
+                return true;
+              }
+              return false;
+            };
+            // 等 loadedmetadata 或 300ms 后尝试淡入
+            if (!tryFadeIn()) {
+              const onCanPlay = () => {
+                audio.removeEventListener("loadedmetadata", onCanPlay);
+                tryFadeIn();
+              };
+              audio.addEventListener("loadedmetadata", onCanPlay);
+              setTimeout(() => audio.removeEventListener("loadedmetadata", onCanPlay), 5000);
+            }
+          }
+        };
+        fadeOut();
+      } else {
+        pauseAndResetCurrentAudio();
+        setCurrentIndex(index);
+        setPlayState(PlayState.PLAYING);
+        setMatchStatus("idle");
+      }
     },
     [queue.length, pauseAndResetCurrentAudio],
   );
