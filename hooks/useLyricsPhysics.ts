@@ -166,7 +166,7 @@ export const useLyricsPhysics = ({
         markScrollIdle();
     }, [lyrics, linePositions, markScrollIdle]);
 
-    // Calculate Active Index
+    // Calculate Active Index — 带稳定化缓冲，避免 currentTime 在边界附近来回跳
     useEffect(() => {
         if (!lyrics.length) {
             if (activeIndex !== -1) {
@@ -187,8 +187,20 @@ export const useLyricsPhysics = ({
             }
         }
 
-        if (nextIndex !== activeIndex) {
+        // 稳定化：回退（上一行）需要额外 80ms 缓冲，前进（下一行）立即跳
+        // 这样 currentTime 抖动只可能在"前进方向"产生，不会回退
+        if (nextIndex === activeIndex || nextIndex === -1) return;
+        if (nextIndex > activeIndex) {
+            // 前进：立即跳
             setActiveIndex(nextIndex);
+        } else {
+            // 回退（罕见，可能是 seek 或时间抖动）：加缓冲
+            // 这种情况需要等 currentTime 稳定在该行 >= 80ms 才确认
+            const target = nextIndex;
+            const targetTime = lyrics[target]?.time ?? 0;
+            if (currentTime - targetTime > 0.08) {
+                setActiveIndex(target);
+            }
         }
     }, [currentTime, lyrics, activeIndex]);
 
@@ -307,11 +319,10 @@ export const useLyricsPhysics = ({
         const springVelocity = system.getVelocity("scrollY");
         const scrollVelocity = isDirectManipulation ? sState.touchVelocity : springVelocity;
 
-        // Elastic margin effect
-        // Disable elastic effect when overshooting to prevent "lyrics distortion"
+        // Elastic margin effect — 只在大速度时才有点弹性，微速度不抖
         const isOvershooting = currentGlobalScrollY < minScroll || currentGlobalScrollY > maxScroll;
-        const elasticFactor = (!isDirectManipulation && !isOvershooting)
-            ? Math.min(Math.max(scrollVelocity * 0.002, -0.5), 0.5)
+        const elasticFactor = (!isDirectManipulation && !isOvershooting && Math.abs(scrollVelocity) > 50)
+            ? Math.min(Math.max(scrollVelocity * 0.0003, -0.15), 0.15)
             : 0;
 
         // Recalculate all positions based on current heights
@@ -330,7 +341,11 @@ export const useLyricsPhysics = ({
 
         // Adjusted maxScrollY to allow last line to be scrolled higher (up to ~10% from bottom)
         const maxScrollY = Math.max(0, contentBottom - containerHeight * 0.1);
-        scrollLimitsRef.current = { min: 0, max: Number.isFinite(maxScrollY) ? maxScrollY : 0 };
+        const newMax = Number.isFinite(maxScrollY) ? maxScrollY : 0;
+        // 只在值变化超过 1px 时才更新边界，避免每帧微小抖动
+        if (Math.abs(scrollLimitsRef.current.max - newMax) > 1) {
+            scrollLimitsRef.current = { min: 0, max: newMax };
+        }
 
         linesState.current.forEach((state, index) => {
             // --- A. Position Physics ---
