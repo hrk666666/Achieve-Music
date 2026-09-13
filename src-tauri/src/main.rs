@@ -497,7 +497,7 @@ addLine('[提示] 关闭本窗口将停止服务','warn');
 </script></body></html>"#
     );
 
-    let console_data_url = "data:text/html;charset=utf-8,".to_string();
+    let mut console_data_url = "data:text/html;charset=utf-8,".to_string();
     console_data_url.push_str(&urlencoding::encode(&console_html));
 
     tauri::Builder::default()
