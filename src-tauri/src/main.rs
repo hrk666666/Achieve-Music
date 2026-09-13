@@ -74,11 +74,17 @@ fn extract_url(text: &str) -> Option<String> {
 }
 
 async fn validate_cdn(url: &str) -> bool {
-    let client = reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .build()
-        .ok()?;
-    let resp = client.head(url).send().await.ok()?;
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let resp = match client.head(url).send().await {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
     let len: u64 = resp
         .headers()
         .get("content-length")
@@ -439,7 +445,8 @@ fn main() {
 
     tauri::Builder::default()
         .setup(move |app| {
-            let win = app.get_webview_window("main").unwrap();
+            let handle = app.handle();
+            let win = handle.get_webview_window("main").unwrap();
             let _ = win.set_fullscreen(true);
             let _ = win.eval(&format!("window.location.replace('{}')", url));
             Ok(())
@@ -494,7 +501,8 @@ addLine('[提示] 关闭本窗口将停止服务','warn');
 
     tauri::Builder::default()
         .setup(move |app| {
-            let win = app.get_webview_window("main").unwrap();
+            let handle = app.handle();
+            let win = handle.get_webview_window("main").unwrap();
             let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: 480, height: 320 }));
             let _ = win.set_resizable(false);
             let _ = win.set_title("Achieve Music 服务控制台");
