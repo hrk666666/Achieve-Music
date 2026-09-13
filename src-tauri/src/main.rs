@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use tauri::Manager;
 
 use futures::StreamExt;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, RANGE};
@@ -445,8 +446,8 @@ fn main() {
 
     tauri::Builder::default()
         .setup(move |app| {
-            let handle = app.handle();
-            let win = handle.get_webview_window("main").unwrap();
+            use tauri::Manager;
+            let win = app.handle().get_webview_window("main").unwrap();
             let _ = win.set_fullscreen(true);
             let _ = win.eval(&format!("window.location.replace('{}')", url));
             Ok(())
@@ -501,8 +502,8 @@ addLine('[提示] 关闭本窗口将停止服务','warn');
 
     tauri::Builder::default()
         .setup(move |app| {
-            let handle = app.handle();
-            let win = handle.get_webview_window("main").unwrap();
+            use tauri::Manager;
+            let win = app.handle().get_webview_window("main").unwrap();
             let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize { width: 480, height: 320 }));
             let _ = win.set_resizable(false);
             let _ = win.set_title("Achieve Music 服务控制台");
