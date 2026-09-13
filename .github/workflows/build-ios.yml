@@ -6,9 +6,19 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-14
+    # NOTE: A device installable .ipa / TestFlight distribution additionally
+    # requires an Apple Developer Program account + signing certificate +
+    # provisioning profile (set APPLE_DEVELOPMENT_TEAM). This workflow produces
+    # an unsigned iOS app build so the pipeline is validated.
+    env:
+      CODE_SIGNING_ALLOWED: 'NO'
+      APPLE_DEVELOPMENT_TEAM: ''
 
     steps:
       - uses: actions/checkout@v4
@@ -32,15 +42,14 @@ jobs:
       - name: Init iOS project
         run: npx tauri ios init
 
-      ## Un-signed build for simulator. A device/TestFlight .ipa additionally
-      ## requires an Apple Developer signing cert + provisioning profile.
-      - name: Build iOS (unsigned, simulator)
-        run: npx tauri ios build -- --features embedded-mode --no-default-features 2>/dev/null || npx tauri ios build -- --features embedded-mode
+      - name: Build iOS (unsiged, embedded-mode)
+        run: npx tauri ios build --target aarch64-apple-ios-sim -- --features embedded-mode
 
       - name: Collect build output
         run: |
           mkdir -p ios-dist
-          find src-tauri -path '*app/build*' -name '*.app' -o -name '*.ipa' 2>/dev/null | head -20
+          find src-tauri -type d -name '*.app' -maxdepth 12 2>/dev/null | head
+          find src-tauri -type f -name '*.app' -prune -o -type d -name '*.app' -print | head
           find src-tauri -name '*.ipa' -exec cp {} ios-dist/ \; 2>/dev/null || true
 
       - name: Upload iOS build
@@ -52,3 +61,4 @@ jobs:
             ios-dist/
             src-tauri/gen/apple/**/build/**/*.app
             src-tauri/gen/apple/**/build/**/*.ipa
+            src-tauri/gen/apple/**/build/**/*.ipas

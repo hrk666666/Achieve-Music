@@ -443,8 +443,12 @@ fn run_embedded() {
         .setup(move |app| {
             use tauri::Manager;
             if let Some(win) = app.handle().get_webview_window("main") {
-                let _ = win.set_fullscreen(true);
                 let _ = win.eval(&format!("window.location.replace('{}')", url));
+                // 桌面端进入全屏；移动端 WebviewWindow 不提供 set_fullscreen
+                #[cfg(desktop)]
+                {
+                    let _ = win.set_fullscreen(true);
+                }
             }
             Ok(())
         })
