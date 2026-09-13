@@ -10,6 +10,11 @@ default = []
 server-mode = []
 embedded-mode = []
 
+[lib]
+# c lib required for Android/iOS (Tauri mobile build links the Rust code as a static lib)
+name = "achieve_music_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
