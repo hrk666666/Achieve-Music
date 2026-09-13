@@ -175,7 +175,7 @@ async fn run_server(port: u16, dist_dir: PathBuf) {
     }
 }
 
-async fn handle_connection(stream: tokio::net::TcpStream, dist_dir: PathBuf) {
+async fn handle_connection(mut stream: tokio::net::TcpStream, dist_dir: PathBuf) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut buf = vec![0u8; 8192];
     let n = match stream.readable().await {
