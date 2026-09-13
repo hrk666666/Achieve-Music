@@ -1,0 +1,54 @@
+name: build-ios
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust (iOS targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Init iOS project
+        run: npx tauri ios init
+
+      ## Un-signed build for simulator. A device/TestFlight .ipa additionally
+      ## requires an Apple Developer signing cert + provisioning profile.
+      - name: Build iOS (unsigned, simulator)
+        run: npx tauri ios build -- --features embedded-mode --no-default-features 2>/dev/null || npx tauri ios build -- --features embedded-mode
+
+      - name: Collect build output
+        run: |
+          mkdir -p ios-dist
+          find src-tauri -path '*app/build*' -name '*.app' -o -name '*.ipa' 2>/dev/null | head -20
+          find src-tauri -name '*.ipa' -exec cp {} ios-dist/ \; 2>/dev/null || true
+
+      - name: Upload iOS build
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: achieve-music-ios
+          path: |
+            ios-dist/
+            src-tauri/gen/apple/**/build/**/*.app
+            src-tauri/gen/apple/**/build/**/*.ipa

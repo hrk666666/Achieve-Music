@@ -1,0 +1,43 @@
+name: build-macos
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [embedded]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Build Tauri macOS (${{ matrix.mode }})
+        run: npx tauri build --bundles app,dmg -- --features ${{ matrix.mode }}-mode
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: achieve-music-macos-${{ matrix.mode }}
+          path: |
+            src-tauri/target/release/bundle/macos/*.app
+            src-tauri/target/release/bundle/dmg/*.dmg

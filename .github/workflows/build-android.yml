@@ -1,0 +1,66 @@
+name: build-android
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Rust (Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Setup Android SDK / NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platforms;android-34
+            build-tools;34.0.0
+            ndk;26.1.10909125
+            platform-tools
+            cmdline-tools;latest
+          accept-licenses: 'true'
+
+      - name: Setup Ruby (needed by Android toolchain)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Init Android project
+        run: npx tauri android init
+
+      - name: Build Android APK (embedded-mode)
+        run: npx tauri android build --apk --split-per-abi -- --features embedded-mode
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: achieve-music-android
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/app-release.apk
