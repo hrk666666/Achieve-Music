@@ -457,7 +457,7 @@ fn run_embedded() {
 }
 
 #[cfg(feature = "server-mode")]
-fn run_server() {
+fn run_server_app() {
     let dist_dir = if cfg!(debug_assertions) {
         std::path::PathBuf::from("../dist")
     } else {
@@ -538,7 +538,7 @@ addLine('[提示] 关闭本窗口将停止服务','warn');
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(feature = "server-mode")]
-    run_server();
+    run_server_app();
     #[cfg(feature = "embedded-mode")]
     run_embedded();
 }
