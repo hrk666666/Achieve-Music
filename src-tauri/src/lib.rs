@@ -427,14 +427,29 @@ fn serve_static(path: &str, dist_dir: &PathBuf, response: &mut Vec<u8>) {
     }
 }
 
+// 前端静态资源目录解析：
+// - 绿色版（便携版）：exe 与 dist 同目录（./dist）
+// - 安装版：exe 上一级下的 dist（../dist）
+// 二者兼容，绿色版打成一个文件夹即可免安装运行。
+fn find_dist_dir() -> PathBuf {
+    if cfg!(debug_assertions) {
+        return std::path::PathBuf::from("../dist");
+    }
+    let exe_parent = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_default();
+    let same_dir = exe_parent.join("dist");
+    if same_dir.is_dir() {
+        same_dir
+    } else {
+        exe_parent.join("../dist")
+    }
+}
+
 #[cfg(feature = "embedded-mode")]
 fn run_embedded() {
-    let dist_dir = if cfg!(debug_assertions) {
-        std::path::PathBuf::from("../dist")
-    } else {
-        let exe = std::env::current_exe().unwrap_or_default();
-        exe.parent().unwrap().join("../dist")
-    };
+    let dist_dir = find_dist_dir();
 
     let port = start_http_server(dist_dir);
     let url = format!("http://localhost:{}", port);
@@ -458,12 +473,7 @@ fn run_embedded() {
 
 #[cfg(feature = "server-mode")]
 fn run_server_app() {
-    let dist_dir = if cfg!(debug_assertions) {
-        std::path::PathBuf::from("../dist")
-    } else {
-        let exe = std::env::current_exe().unwrap_or_default();
-        exe.parent().unwrap().join("../dist")
-    };
+    let dist_dir = find_dist_dir();
 
     let port = start_http_server(dist_dir);
     let url = format!("http://localhost:{}", port);

@@ -35,6 +35,22 @@ jobs:
       - name: Build Tauri (${{ matrix.mode }})
         run: npx tauri build -- --features ${{ matrix.mode }}-mode
 
+      - name: 打包绿色版(免安装便携版)
+        shell: pwsh
+        run: |
+          $green = "AchieveMusic-green-${{ matrix.mode }}"
+          New-Item -ItemType Directory -Force -Path $green | Out-Null
+          Copy-Item src-tauri/target/release/achieve-music.exe "$green/AchieveMusic.exe" -Force
+          Copy-Item -Recurse -Force dist "$green/dist"
+          Compress-Archive -Path $green -DestinationPath "$green.zip" -Force
+          Get-ChildItem *.zip
+
+      - name: Upload green (portable) artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: achieve-music-green-${{ matrix.mode }}
+          path: AchieveMusic-green-${{ matrix.mode }}.zip
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
