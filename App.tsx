@@ -14,6 +14,14 @@ import MediaSessionController from "./components/MediaSessionController";
 import SplashScreen from "./components/SplashScreen";
 
 const SPLASH_KEY = "achieve_music_splash_seen";
+const MUSIC_SCAN_KEY = "achieve_music_music_folder_scan";
+
+interface UpdateInfo {
+  current: string;
+  latest: string;
+  has_update: boolean;
+  download_url: string;
+}
 
 // 无歌词时的全屏播放器模式（唱片式大封面，不显示任何提示文字）
 const FullscreenPlayer: React.FC<{
@@ -113,6 +121,77 @@ const App: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 更新横幅可见性
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  // music 文件夹自动扫描开关（默认开启）
+  const [musicScanEnabled, setMusicScanEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(MUSIC_SCAN_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+
+  // 启动检查：更新 / 网易云可用性 / music 文件夹扫描
+  useEffect(() => {
+    // 1) 检查 GitHub 是否有新版本（非强制，网络异常静默）
+    fetch("/api/check-update")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && data.has_update && data.latest !== data.current) {
+          setUpdateInfo(data);
+        }
+      })
+      .catch(() => {
+        /* 网络异常，静默跳过 */
+      });
+
+    // 2) 检查网易云搜索可用性（仅提示一次，不影响本地播放）
+    fetch("/api/music?server=netease&type=search&id=test")
+      .then((r) => (r.ok ? r.text() : null))
+      .then((text) => {
+        if (!text) return;
+        // 网易云搜索成功时返回歌曲数组（[...]）；失败时返回 error 或空数组
+        const body = text.trim();
+        const unusable =
+          /"error"/.test(body) || body === "[]" || body === "" || body === "null";
+        if (unusable) {
+          toast.info("网易云搜索暂不可用，可继续使用本地文件播放");
+        }
+      })
+      .catch(() => {
+        toast.info("网易云搜索暂不可用，可继续使用本地文件播放");
+      });
+
+    // 3) 自动扫描 music 文件夹（受开关控制）
+    if (musicScanEnabled) {
+      fetch("/api/music-folder")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((list: { name: string; url: string }[]) => {
+          if (!Array.isArray(list) || list.length === 0) return;
+          const songs: Song[] = list.map((f) => {
+            const base = f.name.replace(/\.[^.]+$/, "");
+            const parts = base.split("-");
+            const isPair = parts.length > 1 && base.includes("-");
+            const artist = isPair ? parts[0].trim() : "本地音乐";
+            const title = isPair ? parts.slice(1).join("-").trim() : base;
+            return {
+              id: `music-${f.url}`,
+              title: title || f.name,
+              artist,
+              fileUrl: f.url,
+              needsLyricsMatch: true,
+            } as Song;
+          });
+          playlist.addMusicFolderSongs(songs);
+        })
+        .catch(() => {
+          /* 静默 */
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [musicScanEnabled, playlist.addMusicFolderSongs]);
+
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [activePanel, setActivePanel] = useState<"controls" | "lyrics">(
     "controls",
@@ -204,6 +283,24 @@ const App: React.FC = () => {
       setIsDragOver(true);
     }
   }, []);
+
+  // 切换 music 文件夹自动扫描（默认开启）
+  const toggleMusicScan = useCallback(() => {
+    setMusicScanEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(MUSIC_SCAN_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // 打开浏览器下载新版本
+  const openUpdatePage = useCallback(() => {
+    if (updateInfo?.download_url) {
+      window.open(updateInfo.download_url, "_blank", "noopener");
+    }
+  }, [updateInfo]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -364,6 +461,8 @@ const App: React.FC = () => {
           onImport={handleImportUrl}
           onRemove={playlist.removeSongs}
           accentColor={accentColor}
+          musicScanEnabled={musicScanEnabled}
+          onToggleMusicScan={toggleMusicScan}
         />
       </div>
     </div>
@@ -418,6 +517,18 @@ const App: React.FC = () => {
         isPlaying={playState === PlayState.PLAYING}
         isMobileLayout={isMobileLayout}
       />
+
+      {/* 发现新版本横幅（非强制） */}
+      {updateInfo && (
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-[90] flex items-center gap-3 px-4 py-2 rounded-full bg-black/70 backdrop-blur-xl border border-white/15 shadow-lg cursor-pointer hover:bg-black/80 transition-colors"
+          onClick={openUpdatePage}
+          title="打开下载页"
+        >
+          <span className="text-yellow-300 text-sm">发现新版本 v{updateInfo.latest}</span>
+          <span className="text-white/60 text-xs">点击下载</span>
+        </div>
+      )}
 
       {/* 拖拽 overlay */}
       {isDragOver && (

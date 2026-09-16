@@ -22,10 +22,15 @@ const STORAGE_KEY = "kael-music:playlist";
 const serializeSong = (song: Song): Record<string, unknown> | null => {
   // 本地文件的 blob: URL 刷新即失效，跳过
   if (song.fileUrl?.startsWith("blob:")) return null;
+  // 非 blob 的本地/相对路径 fileUrl 需保留，否则重启后丢失（如 music 文件夹歌曲）
+  const persistFileUrl = song.fileUrl && !song.fileUrl.startsWith("blob:")
+    ? song.fileUrl
+    : undefined;
   return {
     id: song.id,
     title: song.title,
     artist: song.artist,
+    fileUrl: persistFileUrl,
     neteaseId: song.neteaseId,
     platform: song.platform,
     platformId: song.platformId,
@@ -42,11 +47,14 @@ const deserializeSong = (data: Record<string, unknown>): Song => {
     id: data.id as string,
     title: data.title as string,
     artist: data.artist as string,
-    fileUrl: data.neteaseId
-      ? getNeteaseAudioUrl(data.neteaseId as string)
-      : data.platformId && data.platform
-        ? getAudioUrl(data.platform as string, data.platformId as string)
-        : undefined,
+    fileUrl:
+      (data.fileUrl as string) ||
+      (data.neteaseId
+        ? getNeteaseAudioUrl(data.neteaseId as string)
+        : data.platformId && data.platform
+          ? getAudioUrl(data.platform as string, data.platformId as string)
+          : undefined) ||
+      undefined,
     neteaseId: data.neteaseId as string | undefined,
     platform: data.platform as string | undefined,
     platformId: data.platformId as string | undefined,
@@ -155,6 +163,18 @@ export const usePlaylist = () => {
     if (songs.length === 0) return;
     setOriginalQueue((prev) => [...prev, ...songs]);
     setQueue((prev) => [...prev, ...songs]);
+  }, []);
+
+  // 追加 music 文件夹扫描来的歌曲（按 id 去重，避免重复加载）
+  const addMusicFolderSongs = useCallback((songs: Song[]) => {
+    if (songs.length === 0) return;
+    setQueue((prev) => {
+      const existing = new Set(prev.map((s) => s.id));
+      const fresh = songs.filter((s) => !existing.has(s.id));
+      if (fresh.length === 0) return prev;
+      setOriginalQueue((orig) => [...orig, ...fresh]);
+      return [...prev, ...fresh];
+    });
   }, []);
 
   const removeSongs = useCallback((ids: string[]) => {
@@ -388,6 +408,8 @@ export const usePlaylist = () => {
     removeSongs,
     addLocalFiles,
     importFromUrl,
+    appendSongs,
+    addMusicFolderSongs,
     setQueue,
     setOriginalQueue,
   };

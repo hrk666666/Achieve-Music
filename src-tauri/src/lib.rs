@@ -129,9 +129,10 @@ async fn resolve_audio_url(server: &str, song_id: &str) -> Option<String> {
     None
 }
 
-fn start_http_server(dist_dir: PathBuf) -> u16 {
+fn start_http_server(dist_dir: PathBuf, music_dir: PathBuf) -> u16 {
     let port = find_available_port(1420);
     let dist = dist_dir.clone();
+    let music = music_dir.clone();
 
     thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -139,7 +140,7 @@ fn start_http_server(dist_dir: PathBuf) -> u16 {
             .build()
             .unwrap();
         rt.block_on(async move {
-            run_server(port, dist).await;
+            run_server(port, dist, music).await;
         });
     });
 
@@ -148,7 +149,7 @@ fn start_http_server(dist_dir: PathBuf) -> u16 {
     port
 }
 
-async fn run_server(port: u16, dist_dir: PathBuf) {
+async fn run_server(port: u16, dist_dir: PathBuf, music_dir: PathBuf) {
     let listener = match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
         Ok(l) => l,
         Err(e) => {
@@ -164,13 +165,14 @@ async fn run_server(port: u16, dist_dir: PathBuf) {
             Err(_) => continue,
         };
         let dist = dist_dir.clone();
+        let music = music_dir.clone();
         tokio::spawn(async move {
-            handle_connection(stream, dist).await;
+            handle_connection(stream, dist, music).await;
         });
     }
 }
 
-async fn handle_connection(mut stream: tokio::net::TcpStream, dist_dir: PathBuf) {
+async fn handle_connection(mut stream: tokio::net::TcpStream, dist_dir: PathBuf, music_dir: PathBuf) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut buf = vec![0u8; 8192];
     let n = match stream.readable().await {
@@ -197,6 +199,12 @@ async fn handle_connection(mut stream: tokio::net::TcpStream, dist_dir: PathBuf)
 
     if path == "/api/music" {
         handle_api(method, query, &mut response, &buf[..n]).await;
+    } else if path == "/api/music-folder" {
+        handle_music_folder(&mut response, &music_dir);
+    } else if path == "/api/check-update" {
+        handle_check_update(&mut response).await;
+    } else if path.starts_with("/music/") {
+        serve_music_file(path, &music_dir, &mut response);
     } else {
         serve_static(path, &dist_dir, &mut response);
     }
@@ -447,11 +455,188 @@ fn find_dist_dir() -> PathBuf {
     }
 }
 
+// 音乐文件夹目录：与 dist 目录同级（绿色版 exe 同目录 / 安装版安装目录下）
+fn find_music_dir() -> PathBuf {
+    let base = find_dist_dir();
+    base.parent()
+        .map(|p| p.join("music"))
+        .unwrap_or_else(|| PathBuf::from("music"))
+}
+
+// 启动时确保 music 目录存在；若首次创建则返回 true（供打开文件夹）
+fn ensure_music_dir() -> bool {
+    let music = find_music_dir();
+    if music.is_dir() {
+        return false;
+    }
+    if fs::create_dir_all(&music).is_ok() {
+        println!("[music] 已创建音乐文件夹: {:?}", music);
+        true
+    } else {
+        false
+    }
+}
+
+// 打开文件夹（各平台系统命令）
+fn open_folder(path: &PathBuf) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer").arg(path).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(path).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    }
+}
+
+const AUDIO_EXTS: &[&str] = &["mp3", "flac", "wav", "m4a", "ogg", "aac"];
+
+// 扫描 music 目录下的音频文件，返回 {name, url} JSON 列表
+fn handle_music_folder(response: &mut Vec<u8>, music_dir: &PathBuf) {
+    let cors = "Access-Control-Allow-Origin: *\r\n";
+    let mut items: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(music_dir) {
+        let mut names: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|name| {
+                let ext = name.split('.').last().unwrap_or("").to_lowercase();
+                AUDIO_EXTS.contains(&ext.as_str())
+            })
+            .collect();
+        names.sort();
+        for name in names {
+            let url = format!("/music/{}", name);
+            let json_name = name.replace('\\', "\\\\").replace('"', "\\\"");
+            items.push(format!(r#"{{"name":"{}","url":"{}"}}"#, json_name, url));
+        }
+    }
+    let body = format!("[{}]", items.join(","));
+    response.extend_from_slice(
+        format!(
+            "HTTP/1.1 200 OK\r\n{}Content-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+            cors,
+            body.len(),
+            body
+        )
+        .as_bytes(),
+    );
+}
+
+// 提供 /music/ 静态文件服务
+fn serve_music_file(path: &str, music_dir: &PathBuf, response: &mut Vec<u8>) {
+    let clean = path.trim_start_matches('/');
+    let rel = clean.strip_prefix("music/").unwrap_or(clean);
+    let file_path = music_dir.join(rel);
+
+    // 防路径穿越
+    if !file_path.starts_with(music_dir) {
+        response.extend_from_slice(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+        return;
+    }
+
+    match fs::read(&file_path) {
+        Ok(data) => {
+            let ext = file_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            let mime = get_mime(ext);
+            response.extend_from_slice(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nCache-Control: no-cache\r\n\r\n",
+                    mime,
+                    data.len()
+                )
+                .as_bytes(),
+            );
+            response.extend_from_slice(&data);
+        }
+        Err(_) => {
+            response.extend_from_slice(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
+        }
+    }
+}
+
+// 检查 GitHub release 是否有新版本（非强制）：返回 {current, latest, has_update, download_url}
+async fn handle_check_update(response: &mut Vec<u8>) {
+    let cors = "Access-Control-Allow-Origin: *\r\n";
+    let current = env!("CARGO_PKG_VERSION");
+
+    let result = async {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .map_err(|_| ())?;
+        let resp = client
+            .get("https://api.github.com/repos/hrk666666/Achieve-Music/releases/latest")
+            .header("User-Agent", "AchieveMusic")
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|_| ())?;
+        let text = resp.text().await.map_err(|_| ())?;
+        let tag = extract_json_string(&text, "tag_name").ok_or(())?;
+        let html = extract_json_string(&text, "html_url").ok_or(())?;
+        let latest = tag.trim_start_matches('v');
+        let has_update = latest != current;
+        Ok::<(String, bool, String), ()>((latest.to_string(), has_update, html))
+    }
+    .await;
+
+    let body = match result {
+        Ok((latest, has_update, url)) => format!(
+            r#"{{"current":"{}","latest":"{}","has_update":{},"download_url":"{}"}}"#,
+            current, latest, has_update, url
+        ),
+        Err(_) => r#"{"current":"","latest":"","has_update":false,"download_url":""}"#.to_string(),
+    };
+
+    response.extend_from_slice(
+        format!(
+            "HTTP/1.1 200 OK\r\n{}Content-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
+            cors,
+            body.len(),
+            body
+        )
+        .as_bytes(),
+    );
+}
+
+fn extract_json_string(text: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{}\": \"", key);
+    if let Some(start) = text.find(&needle) {
+        let rest = &text[start + needle.len()..];
+        let end = rest.find('"')?;
+        return Some(rest[..end].to_string());
+    }
+    // 兼容无空格形式
+    let needle2 = format!("\"{}\":\"", key);
+    if let Some(start) = text.find(&needle2) {
+        let rest = &text[start + needle2.len()..];
+        let end = rest.find('"')?;
+        return Some(rest[..end].to_string());
+    }
+    None
+}
+
 #[cfg(feature = "embedded-mode")]
 fn run_embedded() {
-    let dist_dir = find_dist_dir();
+    // 确保 music 文件夹存在；首次创建则自动打开
+    let first_run = ensure_music_dir();
+    if first_run {
+        open_folder(&find_music_dir());
+    }
 
-    let port = start_http_server(dist_dir);
+    let dist_dir = find_dist_dir();
+    let music_dir = find_music_dir();
+
+    let port = start_http_server(dist_dir, music_dir);
     let url = format!("http://localhost:{}", port);
 
     tauri::Builder::default()
@@ -473,9 +658,16 @@ fn run_embedded() {
 
 #[cfg(feature = "server-mode")]
 fn run_server_app() {
-    let dist_dir = find_dist_dir();
+    // 确保 music 文件夹存在；首次创建则自动打开
+    let first_run = ensure_music_dir();
+    if first_run {
+        open_folder(&find_music_dir());
+    }
 
-    let port = start_http_server(dist_dir);
+    let dist_dir = find_dist_dir();
+    let music_dir = find_music_dir();
+
+    let port = start_http_server(dist_dir, music_dir);
     let url = format!("http://localhost:{}", port);
 
     // 控制台 HTML

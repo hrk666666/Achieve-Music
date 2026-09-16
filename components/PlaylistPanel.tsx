@@ -42,6 +42,8 @@ interface PlaylistPanelProps {
     onImport: (url: string) => Promise<boolean>;
     onRemove: (ids: string[]) => void;
     accentColor: string;
+    musicScanEnabled?: boolean;
+    onToggleMusicScan?: () => void;
 }
 
 const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
@@ -52,7 +54,9 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
     onPlay,
     onImport,
     onRemove,
-    accentColor
+    accentColor,
+    musicScanEnabled = true,
+    onToggleMusicScan
 }) => {
     const [isAdding, setIsAdding] = useState(false);
     const [visible, setVisible] = useState(false);
@@ -358,6 +362,19 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                                 })}
                             </div>
                         )}
+                    </div>
+
+                    {/* Music Scan Toggle */}
+                    <div className="px-5 py-3 shrink-0 border-t border-white/5 bg-transparent">
+                        <label className="flex items-center justify-between cursor-pointer">
+                            <span className="text-white/60 text-sm font-medium">自动扫描音乐</span>
+                            <button
+                                onClick={onToggleMusicScan}
+                                className={`w-11 h-6 rounded-full transition-colors duration-200 relative ${musicScanEnabled ? 'bg-green-500' : 'bg-white/20'}`}
+                            >
+                                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${musicScanEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                            </button>
+                        </label>
                     </div>
 
                 </animated.div>
