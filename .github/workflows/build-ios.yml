@@ -14,11 +14,11 @@ jobs:
     runs-on: macos-14
     # NOTE: A device installable .ipa / TestFlight distribution additionally
     # requires an Apple Developer Program account + signing certificate +
-    # provisioning profile (set APPLE_DEVELOPMENT_TEAM). This workflow produces
-    # an unsigned iOS app build so the pipeline is validated.
+    # provisioning profile (set tauri.conf.json>bundle>iOS>developmentTeam,
+    # currently a placeholder for the unsigned simulator build). This workflow
+    # produces an unsigned iOS simulator app so the pipeline is validated.
     env:
       CODE_SIGNING_ALLOWED: 'NO'
-      APPLE_DEVELOPMENT_TEAM: ''
 
     steps:
       - uses: actions/checkout@v4
