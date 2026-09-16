@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     # NOTE: A device installable .ipa / TestFlight distribution additionally
     # requires an Apple Developer Program account + signing certificate +
     # provisioning profile (set tauri.conf.json>bundle>iOS>developmentTeam,
@@ -44,12 +44,6 @@ jobs:
 
       - name: Build iOS (unsiged, embedded-mode)
         run: npx tauri ios build --target aarch64-sim -- --features embedded-mode
-
-      - name: Install ios-sim runtime & create simulator (# if needed)
-        run: |
-          xcrun simctl list devices available | head -20
-          echo "---"
-          ls src-tauri/gen/apple/AchieveMusic.xcodeproj 2>/dev/null || ls src-tauri/gen/apple/*.xcodeproj 2>/dev/null
 
       - name: Collect build output
         run: |
