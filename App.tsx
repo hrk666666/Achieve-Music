@@ -177,7 +177,9 @@ const App: React.FC = () => {
             const parts = base.split("-");
             const isPair = parts.length > 1 && base.includes("-");
             const artist = isPair ? parts[0].trim() : "本地音乐";
-            const title = isPair ? parts.slice(1).join("-").trim() : base;
+            let title = isPair ? parts.slice(1).join("-").trim() : base;
+            // 去掉文件名里网易云歌曲 ID，如 (12345678) / [12345678]，保证云端歌词匹配
+            title = title.replace(/[\(\[]?\d{7,9}[\)\]]?/g, "").trim();
             return {
               id: `music-${f.url}`,
               title: title || f.name,

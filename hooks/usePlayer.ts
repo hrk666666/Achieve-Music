@@ -384,6 +384,10 @@ export const usePlayer = ({
     const songNeteaseId = currentSong.neteaseId;
     const songFileUrl = currentSong.fileUrl;
 
+    // 云端回落匹配用的标题/歌手，优先用内嵌元数据修正后的值
+    let searchTitle = songTitle;
+    let searchArtist = songArtist;
+
     let cancelled = false;
 
     const markMatchFailed = () => {
@@ -423,6 +427,8 @@ export const usePlayer = ({
           const metaUpdates: Partial<Song> = {};
           if (meta.title && meta.title !== songTitle) metaUpdates.title = meta.title;
           if (meta.artist && (!songArtist || songArtist === "本地音乐")) metaUpdates.artist = meta.artist;
+          if (meta.title) searchTitle = meta.title;
+          if (meta.artist) searchArtist = meta.artist;
           if (meta.picture) {
             metaUpdates.coverUrl = meta.picture;
             try {
@@ -468,7 +474,7 @@ export const usePlayer = ({
           }
         } else {
           const result = await withTimeout(
-            searchAndMatchLyrics(songTitle, songArtist),
+            searchAndMatchLyrics(searchTitle, searchArtist),
             MATCH_TIMEOUT_MS,
           );
           if (cancelled) return;
