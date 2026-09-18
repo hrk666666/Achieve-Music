@@ -346,6 +346,52 @@ async fn netease_search(client: &reqwest::Client, keyword: &str) -> Option<Strin
 }
 
 // 多平台聚合搜索：并行查 netease/tencent/kugou/kuwo，合并结果并标注 platform
+// 从 URL query 中提取指定参数的值
+fn query_param(url: &str, key: &str) -> Option<String> {
+    for part in url.split('&') {
+        let mut kv = part.splitn(2, '=');
+        if let Some(k) = kv.next() {
+            if k.ends_with(key) {
+                if let Some(v) = kv.next() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+// 把 Meting2 返回的 {title,author,url,pic,lrc} 转成前端期望的 {id,name,artist,pic_id,lyric_id,url_id}
+fn convert_meting2(item: &serde_json::Value, platform: &str) -> Option<serde_json::Value> {
+    let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let author = item.get("author").and_then(|v| v.as_str()).unwrap_or("");
+    let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
+    let pic = item.get("pic").and_then(|v| v.as_str()).unwrap_or("");
+    let lrc = item.get("lrc").and_then(|v| v.as_str()).unwrap_or("");
+
+    let song_id = query_param(url, "id").unwrap_or_default();
+    if song_id.is_empty() || song_id == "undefined" {
+        return None;
+    }
+    if title.is_empty() && author.is_empty() {
+        return None;
+    }
+    let pic_id = query_param(pic, "id").unwrap_or_else(|| song_id.clone());
+    let lyric_id = query_param(lrc, "id").unwrap_or_else(|| song_id.clone());
+
+    Some(serde_json::json!({
+        "id": song_id,
+        "name": title,
+        "artist": author,
+        "album": "",
+        "pic_id": pic_id,
+        "lyric_id": lyric_id,
+        "url_id": song_id,
+        "duration": 0,
+        "platform": platform
+    }))
+}
+
 async fn search_multi_platform(client: &reqwest::Client, keyword: &str) -> Option<String> {
     let encoded = urlencoding::encode(keyword);
     let platforms = ["netease", "tencent", "kugou", "kuwo"];
@@ -358,10 +404,10 @@ async fn search_multi_platform(client: &reqwest::Client, keyword: &str) -> Optio
                 Ok(text) => {
                     if let Ok(arr) = serde_json::from_str::<serde_json::Value>(&text) {
                         if let Some(items) = arr.as_array() {
-                            for item in items.iter().take(10) {
-                                let mut v = item.clone();
-                                v["platform"] = serde_json::Value::String(p.to_string());
-                                all.push(v);
+                            for item in items.iter().take(8) {
+                                if let Some(v) = convert_meting2(item, p) {
+                                    all.push(v);
+                                }
                             }
                         }
                     }
