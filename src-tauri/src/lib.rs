@@ -274,14 +274,16 @@ fn url_decode(s: &str) -> String {
 // ===== 网易云官方接口直连（优先），失败时由调用方回落 Meting 代理 =====
 fn netease_headers() -> reqwest::header::HeaderMap {
     let mut h = reqwest::header::HeaderMap::new();
-    if let Ok(v) = reqwest::header::HeaderValue::from_static(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-    ) {
-        h.insert(reqwest::header::USER_AGENT, v);
-    }
-    if let Ok(v) = reqwest::header::HeaderValue::from_static("https://music.163.com/") {
-        h.insert(reqwest::header::REFERER, v);
-    }
+    h.insert(
+        reqwest::header::USER_AGENT,
+        reqwest::header::HeaderValue::from_static(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+        ),
+    );
+    h.insert(
+        reqwest::header::REFERER,
+        reqwest::header::HeaderValue::from_static("https://music.163.com/"),
+    );
     h
 }
 
