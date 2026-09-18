@@ -99,6 +99,27 @@ async fn resolve_audio_url(server: &str, song_id: &str) -> Option<String> {
         .build()
         .ok()?;
 
+    // 网易云：官方 outer/url 优先（无需登录、无需加密签名），成功后用真实 CDN 地址代理播放
+    if server == "netease" {
+        let outer = format!(
+            "https://music.163.com/song/media/outer/url?id={}.mp3",
+            song_id
+        );
+        if let Ok(resp) = client
+            .get(&outer)
+            .header("User-Agent", "Mozilla/5.0")
+            .header("Referer", "https://music.163.com/")
+            .send()
+            .await
+        {
+            let final_url = resp.url().to_string();
+            if resp.status().is_success() && validate_cdn(&final_url).await {
+                println!("[music] netease 官方 outer/url 解析成功");
+                return Some(final_url);
+            }
+        }
+    }
+
     // 主平台
     let url = meting_url(server, "url", &format!("id={}&quality=320", song_id));
     if let Ok(resp) = client.get(&url).send().await {
@@ -250,6 +271,135 @@ fn url_decode(s: &str) -> String {
     String::from_utf8_lossy(&result).to_string()
 }
 
+// ===== 网易云官方接口直连（优先），失败时由调用方回落 Meting 代理 =====
+fn netease_headers() -> reqwest::header::HeaderMap {
+    let mut h = reqwest::header::HeaderMap::new();
+    if let Ok(v) = reqwest::header::HeaderValue::from_static(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    ) {
+        h.insert(reqwest::header::USER_AGENT, v);
+    }
+    if let Ok(v) = reqwest::header::HeaderValue::from_static("https://music.163.com/") {
+        h.insert(reqwest::header::REFERER, v);
+    }
+    h
+}
+
+async fn netease_get_json(client: &reqwest::Client, url: &str) -> Option<serde_json::Value> {
+    let resp = client.get(url).headers(netease_headers()).send().await.ok()?;
+    let text = resp.text().await.ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+// 官方搜索，翻译成前端期望的 Meting 兼容数组
+async fn netease_search(client: &reqwest::Client, keyword: &str) -> Option<String> {
+    let url = format!(
+        "https://music.163.com/api/search/get/?type=1&s={}&limit=20",
+        urlencoding::encode(keyword)
+    );
+    let v = netease_get_json(client, &url).await?;
+    if v.get("code").and_then(|c| c.as_i64()) != Some(200) {
+        return None;
+    }
+    let songs = v.get("result")?.get("songs")?.as_array()?;
+    let items: Vec<serde_json::Value> = songs
+        .iter()
+        .map(|s| {
+            let id = s
+                .get("id")
+                .and_then(|x| x.as_i64())
+                .unwrap_or(0)
+                .to_string();
+            let name = s.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let artist = s
+                .get("artists")
+                .and_then(|a| a.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|a| a.get("name").and_then(|n| n.as_str()).map(ToString::to_string))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
+            let album = s
+                .get("album")
+                .and_then(|a| a.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            let pic = s
+                .get("album")
+                .and_then(|a| a.get("picUrl"))
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string();
+            let duration = s.get("duration").and_then(|d| d.as_i64()).unwrap_or(0);
+            serde_json::json!({
+                "id": id, "name": name, "artist": artist, "album": album,
+                "pic_id": pic, "lyric_id": id, "url_id": id, "duration": duration
+            })
+        })
+        .collect();
+    Some(serde_json::to_string(&items).ok()?)
+}
+
+// 去掉 LRC 中的歌曲元信息行
+fn filter_meta_lines(lrc: &str) -> String {
+    lrc.lines()
+        .map(str::trim_end)
+        .filter(|l| {
+            !l.contains("作词")
+                && !l.contains("作曲")
+                && !l.contains("编曲")
+                && !l.contains("制作人")
+                && !l.contains("OP")
+                && !l.contains("SP")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// 官方歌词，返回前端期望的 {lyric, tlyric}
+async fn netease_lyric(client: &reqwest::Client, song_id: &str) -> Option<String> {
+    let url = format!(
+        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1",
+        song_id
+    );
+    let v = netease_get_json(client, &url).await?;
+    if v.get("code").and_then(|c| c.as_i64()) != Some(200) {
+        return None;
+    }
+    let lyric = filter_meta_lines(
+        v.get("lrc")
+            .and_then(|l| l.get("lyric"))
+            .and_then(|x| x.as_str())
+            .unwrap_or(""),
+    );
+    let tlyric = filter_meta_lines(
+        v.get("tlyric")
+            .and_then(|l| l.get("lyric"))
+            .and_then(|x| x.as_str())
+            .unwrap_or(""),
+    );
+    Some(serde_json::json!({ "lyric": lyric, "tlyric": tlyric }).to_string())
+}
+
+// 官方单曲封面 URL
+async fn netease_song_pic(client: &reqwest::Client, song_id: &str) -> Option<String> {
+    let url = format!(
+        "https://music.163.com/api/song/detail/?id={}&ids=[{}]",
+        song_id, song_id
+    );
+    let v = netease_get_json(client, &url).await?;
+    v.get("songs")?
+        .as_array()?
+        .first()?
+        .get("album")?
+        .get("picUrl")?
+        .as_str()
+        .map(ToString::to_string)
+}
+
 async fn handle_api(method: &str, query: &str, response: &mut Vec<u8>, raw_req: &[u8]) {
     let q = parse_query(query);
     let server = q.get("server").cloned().unwrap_or_else(|| "netease".into());
@@ -275,6 +425,15 @@ async fn handle_api(method: &str, query: &str, response: &mut Vec<u8>, raw_req: 
     match api_type.as_str() {
         "search" => {
             let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().unwrap();
+            // 官方网易搜索优先（直连 music.163.com，不依赖第三方代理）
+            if server == "netease" {
+                if let Some(list) = netease_search(&client, &id).await {
+                    response.extend_from_slice(
+                        format!("HTTP/1.1 200 OK\r\n{}Content-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", cors, list.len(), list).as_bytes(),
+                    );
+                    return;
+                }
+            }
             let url = meting_url(&server, "search", &format!("id={}", id));
             match client.get(&url).send().await {
                 Ok(resp) => match resp.text().await {
@@ -291,22 +450,24 @@ async fn handle_api(method: &str, query: &str, response: &mut Vec<u8>, raw_req: 
         }
         "lrc" => {
             let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().unwrap();
+            // 官方网易歌词优先（返回前端期望的 {lyric, tlyric} JSON）
+            if server == "netease" {
+                if let Some(body) = netease_lyric(&client, &id).await {
+                    response.extend_from_slice(
+                        format!("HTTP/1.1 200 OK\r\n{}Content-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", cors, body.len(), body).as_bytes(),
+                    );
+                    return;
+                }
+            }
+            // 回落 meting：把纯文本歌词包成前端期望的 JSON 结构
             let url = meting_url(&server, "lyric", &format!("id={}", id));
             match client.get(&url).send().await {
                 Ok(resp) => match resp.text().await {
                     Ok(text) => {
-                        // 过滤 metadata
-                        let filtered: String = text
-                            .lines()
-                            .filter(|l| {
-                                !l.contains("作曲") && !l.contains("作词") && !l.contains("编曲")
-                                    && !l.contains("制作人") && !l.contains("OP") && !l.contains("SP")
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
+                        let filtered = filter_meta_lines(&text);
+                        let body = serde_json::json!({ "lyric": filtered, "tlyric": "" }).to_string();
                         response.extend_from_slice(
-                            format!("HTTP/1.1 200 OK\r\n{}Content-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", cors, filtered.len(), filtered)
-                                .as_bytes(),
+                            format!("HTTP/1.1 200 OK\r\n{}Content-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", cors, body.len(), body).as_bytes(),
                         );
                     }
                     Err(_) => send_error(response, cors, "歌词获取失败"),
@@ -358,6 +519,21 @@ async fn handle_api(method: &str, query: &str, response: &mut Vec<u8>, raw_req: 
         }
         "pic" => {
             let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().unwrap();
+            // 官方优先：id 可能是完整封面 URL（官方搜索返回），也可能是歌曲 id
+            if server == "netease" {
+                if id.starts_with("http") {
+                    response.extend_from_slice(
+                        format!("HTTP/1.1 302 Found\r\nLocation: {}\r\nContent-Length: 0\r\n\r\n", id).as_bytes(),
+                    );
+                    return;
+                }
+                if let Some(pic_url) = netease_song_pic(&client, &id).await {
+                    response.extend_from_slice(
+                        format!("HTTP/1.1 302 Found\r\nLocation: {}\r\nContent-Length: 0\r\n\r\n", pic_url).as_bytes(),
+                    );
+                    return;
+                }
+            }
             let url = meting_url(&server, "pic", &format!("id={}", id));
             if let Ok(resp) = client.get(&url).send().await {
                 if let Ok(text) = resp.text().await {
