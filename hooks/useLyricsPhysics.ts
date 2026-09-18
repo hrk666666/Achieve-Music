@@ -30,7 +30,7 @@ export interface LinePhysicsState {
 const getLinePosSpring = (relativeIndex: number): SpringConfig => {
     // 1. Past Lines & Active Line: Extremely fast snap (High stiffness)
     if (relativeIndex <= 0) {
-        return { mass: 1, stiffness: 1200, damping: 60, precision: 0.1 };
+        return { mass: 1, stiffness: 1200, damping: 80, precision: 0.1 };
     }
 
     // 2. Future Lines: "Fast to slow, variation needs to be larger"
