@@ -258,6 +258,35 @@ export const parseAudioMetadata = (
   });
 };
 
+// 从远端 URL 读取音频内嵌元数据（封面/内嵌歌词），供 music 目录歌曲使用
+export const loadRemoteAudioMetadata = async (
+  url: string,
+  fileName = "audio",
+): Promise<{ title?: string; artist?: string; picture?: string; lyrics?: string }> => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return {};
+    const blob = await res.blob();
+    const file = new File([blob], fileName, { type: blob.type || "audio/mpeg" });
+    return await parseAudioMetadata(file);
+  } catch {
+    return {};
+  }
+};
+
+// 读取同名 .lrc 字幕（如 xxx.mp3 -> xxx.lrc），仅当内容带时间轴时返回
+export const loadSidecarLyrics = async (audioUrl: string): Promise<string | null> => {
+  try {
+    const lrcUrl = audioUrl.replace(/\.[^.]+$/, "") + ".lrc";
+    const res = await fetch(lrcUrl);
+    if (!res.ok) return null;
+    const text = await res.text();
+    return text && /\[\d{1,2}:\d{2}/.test(text) ? text : null;
+  } catch {
+    return null;
+  }
+};
+
 export const extractColors = async (imageSrc: string): Promise<string[]> => {
   if (typeof ColorThief === "undefined") {
     return ["#4f46e5", "#db2777", "#1f2937"];

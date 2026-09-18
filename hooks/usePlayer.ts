@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { Song, PlayState, PlayMode } from "../types";
-import { extractColors, shuffleArray } from "../services/utils";
+import { extractColors, shuffleArray, loadRemoteAudioMetadata, loadSidecarLyrics } from "../services/utils";
 import { parseLyrics } from "../services/lyrics";
 import {
   fetchLyricsById,
@@ -382,6 +382,7 @@ export const usePlayer = ({
     const existingLyrics = currentSong.lyrics ?? [];
     const isNeteaseSong = currentSong.isNetease;
     const songNeteaseId = currentSong.neteaseId;
+    const songFileUrl = currentSong.fileUrl;
 
     let cancelled = false;
 
@@ -411,6 +412,45 @@ export const usePlayer = ({
     const fetchLyrics = async () => {
       setMatchStatus("matching");
       try {
+        // music 目录本地歌曲：优先读取音频内嵌元数据（封面/内嵌歌词）与同名 .lrc
+        const isLocalMusicFolder =
+          !!songFileUrl && songFileUrl.startsWith("/music/");
+        if (isLocalMusicFolder) {
+          const meta = await loadRemoteAudioMetadata(songFileUrl, songTitle);
+          if (cancelled) return;
+
+          // 用内嵌元数据修正标题/歌手/封面
+          const metaUpdates: Partial<Song> = {};
+          if (meta.title && meta.title !== songTitle) metaUpdates.title = meta.title;
+          if (meta.artist && (!songArtist || songArtist === "本地音乐")) metaUpdates.artist = meta.artist;
+          if (meta.picture) {
+            metaUpdates.coverUrl = meta.picture;
+            try {
+              const c = await extractColors(meta.picture);
+              if (c && c.length) metaUpdates.colors = c;
+            } catch {
+              /* 忽略取色失败 */
+            }
+          }
+          if (Object.keys(metaUpdates).length > 0) {
+            updateSongInQueue(songId, metaUpdates);
+          }
+
+          // 歌词：内嵌歌词优先，其次同名 .lrc，最后回落到云端匹配
+          let parsed =
+            meta.lyrics && meta.lyrics.trim() ? parseLyrics(meta.lyrics) : [];
+          if (parsed.length === 0) {
+            const lrc = await loadSidecarLyrics(songFileUrl);
+            if (lrc) parsed = parseLyrics(lrc);
+          }
+          if (parsed.length > 0) {
+            if (cancelled) return;
+            updateSongInQueue(songId, { lyrics: parsed, needsLyricsMatch: false });
+            markMatchSuccess();
+            return;
+          }
+        }
+
         if (isNeteaseSong && songNeteaseId) {
           const raw = await withTimeout(
             fetchLyricsById(songNeteaseId),

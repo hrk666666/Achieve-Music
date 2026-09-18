@@ -43,6 +43,8 @@ fn get_mime(ext: &str) -> &str {
         "flac" => "audio/flac",
         "m4a" => "audio/mp4",
         "ogg" => "audio/ogg",
+        "lrc" => "text/plain; charset=utf-8",
+        "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     }
 }
