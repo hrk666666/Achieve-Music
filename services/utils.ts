@@ -191,19 +191,32 @@ export const parseNeteaseLink = parseMusicLink;
 
 
 
-// 解析 FLAC 容器的 VORBIS_COMMENT block，返回 { KEY_UPPER: value }
-// jsmediatags 不解析 FLAC Vorbis comment，这里单独把 LYRICS 等字段补出来
-const parseFlacVorbisComments = async (
+// 完整解析 FLAC 容器：VORBIS_COMMENT (type=4) + PICTURE (type=6)
+// 不依赖 jsmediatags，直接读二进制，保证 FLAC 封面和内嵌歌词都能取出
+const parseFlacMetadata = async (
   file: File,
-): Promise<Record<string, string>> => {
+): Promise<{ title?: string; artist?: string; picture?: string; lyrics?: string }> => {
   try {
     const ab = await file.arrayBuffer();
     const dv = new DataView(ab);
     if (ab.byteLength < 4) return {};
-    if (dv.getUint8(0)!==0x66||dv.getUint8(1)!==0x4c||dv.getUint8(2)!==0x61||dv.getUint8(3)!==0x43) return {};
+    if (
+      dv.getUint8(0) !== 0x66 || dv.getUint8(1) !== 0x4c ||
+      dv.getUint8(2) !== 0x61 || dv.getUint8(3) !== 0x43
+    ) return {};
+
     let offset = 4;
     const total = ab.byteLength;
     const decoder = new TextDecoder();
+    const out: { title?: string; artist?: string; picture?: string; lyrics?: string } = {};
+
+    const toBase64 = (bytes: Uint8Array) => {
+      let bin = "";
+      const len = bytes.length;
+      for (let i = 0; i < len; i++) bin += String.fromCharCode(bytes[i]);
+      return window.btoa(bin);
+    };
+
     while (offset + 4 <= total) {
       const header = dv.getUint8(offset);
       const last = (header & 0x80) !== 0;
@@ -211,34 +224,56 @@ const parseFlacVorbisComments = async (
       const length = dv.getUint32(offset, false) & 0xffffff;
       const blockStart = offset + 4;
       if (blockStart + length > total) break;
+
       if (type === 4) {
+        // VORBIS_COMMENT
         let p = blockStart;
         const vendorLen = dv.getUint32(p, true);
         p += 4 + vendorLen;
         const comments = dv.getUint32(p, true);
         p += 4;
-        const out: Record<string, string> = {};
         for (let i = 0; i < comments && p + 4 <= total; i++) {
-          const len = dv.getUint32(p, true); p += 4;
+          const len = dv.getUint32(p, true);
+          p += 4;
           if (p + len > total) break;
           const raw = decoder.decode(new Uint8Array(ab, p, len));
           p += len;
-          const eq = raw.indexOf('=');
-          if (eq > 0) out[raw.slice(0, eq).toUpperCase()] = raw.slice(eq + 1);
+          const eq = raw.indexOf("=");
+          if (eq > 0) {
+            const k = raw.slice(0, eq).toUpperCase();
+            const v = raw.slice(eq + 1);
+            if (k === "TITLE") out.title = v;
+            else if (k === "ARTIST") out.artist = v;
+            else if (k === "LYRICS" || k === "LYRIC" || k === "UNSYNCEDLYRICS") out.lyrics = v;
+          }
         }
-        return out;
+      } else if (type === 6) {
+        // METADATA_BLOCK_PICTURE —— 取第一张封面
+        if (!out.picture) {
+          let p = blockStart;
+          p += 4; // picture type
+          const mimeLen = dv.getUint32(p, false); p += 4;
+          const mime = decoder.decode(new Uint8Array(ab, p, mimeLen)); p += mimeLen;
+          const descLen = dv.getUint32(p, false); p += 4 + descLen;
+          p += 16; // width, height, depth, colors used
+          const dataLen = dv.getUint32(p, false); p += 4;
+          if (p + dataLen <= total) {
+            const b64 = toBase64(new Uint8Array(ab, p, dataLen));
+            out.picture = `data:${mime.split(";")[0]};base64,${b64}`;
+          }
+        }
       }
+
       offset = blockStart + length;
       if (last) break;
     }
-    return {};
+    return out;
   } catch {
     return {};
   }
 };
 
-// Metadata Parser using jsmediatags
-
+// Metadata Parser using jsmediatags (MP3/ID3v2); FLAC 走 parseFlacMetadata
 export const parseAudioMetadata = (
   file: File,
 ): Promise<{
@@ -248,6 +283,12 @@ export const parseAudioMetadata = (
   lyrics?: string;
 }> => {
   return new Promise((resolve) => {
+    // FLAC 文件直接用自写解析器，不依赖 jsmediatags
+    if (file.type === "audio/flac" || /\.flac$/i.test(file.name || "")) {
+      parseFlacMetadata(file).then(resolve).catch(() => resolve({}));
+      return;
+    }
+
     if (typeof jsmediatags === "undefined") {
       resolve({});
       return;
@@ -271,10 +312,7 @@ export const parseAudioMetadata = (
               pictureUrl = `data:${format};base64,${window.btoa(base64String)}`;
             }
 
-            // Extract embedded lyrics (USLT tag for unsynchronized lyrics)
-            // Some formats also use "lyrics" or "LYRICS" tag
             if (tags.USLT) {
-              // USLT can be an object with lyrics.text or just a string
               lyricsText =
                 typeof tags.USLT === "object"
                   ? tags.USLT.lyrics || tags.USLT.text
@@ -285,23 +323,12 @@ export const parseAudioMetadata = (
               lyricsText = tags.LYRICS;
             }
 
-            const finalize = (extraLyrics?: string) => {
-              resolve({
-                title: tags.title,
-                artist: tags.artist,
-                picture: pictureUrl,
-                lyrics: extraLyrics ?? lyricsText,
-              });
-            };
-
-            // FLAC Vorbis comment 的 LYRICS 字段 jsmediatags 会丢弃，手动补
-            if (!lyricsText && (file.type === "audio/flac" || /\.flac$/i.test(file.name || ""))) {
-              parseFlacVorbisComments(file).then((vc) => {
-                finalize(vc.LYRICS || vc.LYRIC || vc.UNSYNCEDLYRICS);
-              }).catch(() => finalize());
-              return;
-            }
-            finalize();
+            resolve({
+              title: tags.title,
+              artist: tags.artist,
+              picture: pictureUrl,
+              lyrics: lyricsText,
+            });
           } catch (innerErr) {
             resolve({});
           }
