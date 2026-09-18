@@ -150,14 +150,18 @@ export async function searchAndMatchLyrics(
   artist: string,
 ): Promise<{ lrc: string; yrc?: string; tLrc?: string; metadata: string[] } | null> {
   try {
-    const songs = await searchNetEase(`${title} ${artist}`, { limit: 5 });
+    const songs = await searchNetEase(`${title} ${artist}`, { limit: 8 });
     if (songs.length === 0) return null;
 
-    const song = songs[0];
-    const songId = song.platformId;
-    if (!songId) return null;
-
-    return await fetchLyricsById(songId, song.platform);
+    // 依次尝试每个平台结果，取第一个有歌词的
+    for (const song of songs.slice(0, 8)) {
+      if (!song.platformId) continue;
+      const result = await fetchLyricsById(song.platformId, song.platform);
+      if (result && result.lrc && result.lrc.trim()) {
+        return result;
+      }
+    }
+    return null;
   } catch (error) {
     return null;
   }
