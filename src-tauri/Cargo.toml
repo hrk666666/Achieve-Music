@@ -1,6 +1,6 @@
 [package]
 name = "achieve-music"
-version = "1.0.4"
+version = "1.0.5"
 description = "Achieve Music - 本地音乐播放器"
 authors = ["hrk666666"]
 edition = "2021"
@@ -23,7 +23,7 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "stream"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
 tokio-stream = "0.1"
 futures = "0.3"
 urlencoding = "2"
