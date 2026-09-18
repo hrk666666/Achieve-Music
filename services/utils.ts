@@ -295,7 +295,7 @@ export const parseAudioMetadata = (
             };
 
             // FLAC Vorbis comment 的 LYRICS 字段 jsmediatags 会丢弃，手动补
-            if (!lyricsText && /\.flac$/i.test(file.name)) {
+            if (!lyricsText && (file.type === "audio/flac" || /\.flac$/i.test(file.name || ""))) {
               parseFlacVorbisComments(file).then((vc) => {
                 finalize(vc.LYRICS || vc.LYRIC || vc.UNSYNCEDLYRICS);
               }).catch(() => finalize());
