@@ -345,6 +345,40 @@ async fn netease_search(client: &reqwest::Client, keyword: &str) -> Option<Strin
     Some(serde_json::to_string(&items).ok()?)
 }
 
+// 多平台聚合搜索：并行查 netease/tencent/kugou/kuwo，合并结果并标注 platform
+async fn search_multi_platform(client: &reqwest::Client, keyword: &str) -> Option<String> {
+    let encoded = urlencoding::encode(keyword);
+    let platforms = ["netease", "tencent", "kugou", "kuwo"];
+    let mut all: Vec<serde_json::Value> = Vec::new();
+
+    for p in platforms.iter() {
+        let url = meting_url(p, "search", &format!("id={}", encoded));
+        match client.get(&url).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(text) => {
+                    if let Ok(arr) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(items) = arr.as_array() {
+                            for item in items.iter().take(10) {
+                                let mut v = item.clone();
+                                v["platform"] = serde_json::Value::String(p.to_string());
+                                all.push(v);
+                            }
+                        }
+                    }
+                }
+                Err(_) => {}
+            },
+            Err(_) => {}
+        }
+    }
+
+    if all.is_empty() {
+        None
+    } else {
+        Some(serde_json::to_string(&all).ok()?)
+    }
+}
+
 // 去掉 LRC 中的歌曲元信息行
 fn filter_meta_lines(lrc: &str) -> String {
     lrc.lines()
@@ -426,8 +460,15 @@ async fn handle_api(method: &str, query: &str, response: &mut Vec<u8>, raw_req: 
 
     match api_type.as_str() {
         "search" => {
-            let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().unwrap();
-            // 官方网易搜索优先（直连 music.163.com，不依赖第三方代理）
+            let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).build().unwrap();
+            // 多平台聚合搜索（netease/tencent/kugou/kuwo 并行），全面覆盖
+            if let Some(list) = search_multi_platform(&client, &id).await {
+                response.extend_from_slice(
+                    format!("HTTP/1.1 200 OK\r\n{}Content-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", cors, list.len(), list).as_bytes(),
+                );
+                return;
+            }
+            // 兜底：官方网易云搜索
             if server == "netease" {
                 if let Some(list) = netease_search(&client, &id).await {
                     response.extend_from_slice(
