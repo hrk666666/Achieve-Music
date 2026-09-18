@@ -153,10 +153,11 @@ export async function searchAndMatchLyrics(
     const songs = await searchNetEase(`${title} ${artist}`, { limit: 5 });
     if (songs.length === 0) return null;
 
-    const songId = songs[0].neteaseId;
+    const song = songs[0];
+    const songId = song.platformId;
     if (!songId) return null;
 
-    return await fetchLyricsById(songId);
+    return await fetchLyricsById(songId, song.platform);
   } catch (error) {
     return null;
   }
@@ -168,10 +169,11 @@ const METADATA_LINE = /^\[\d{2}:\d{2}[.:]\d{2,3}\]\s*(作曲|作词|编曲|制�
 // 获取歌词
 export async function fetchLyricsById(
   songId: string,
+  platform: string = "netease",
 ): Promise<{ lrc: string; yrc?: string; tLrc?: string; metadata: string[] } | null> {
   try {
     const data = await fetchApi({
-      server: "netease",
+      server: platform,
       type: "lrc",
       id: songId,
     });
