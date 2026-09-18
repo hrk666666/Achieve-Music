@@ -148,13 +148,16 @@ const App: React.FC = () => {
 
     // 2) 检查网易云搜索可用性（仅提示一次，不影响本地播放）
     fetch("/api/music?server=netease&type=search&id=test")
-      .then((r) => (r.ok ? r.text() : null))
+      .then((r) => r.text())
       .then((text) => {
-        if (!text) return;
-        // 网易云搜索成功时返回歌曲数组（[...]）；失败时返回 error 或空数组
-        const body = text.trim();
+        // 搜索失败时服务端返回 HTTP 502 + JSON {"error":...}；网络断开也可能返回空
+        const body = (text || "").trim();
         const unusable =
-          /"error"/.test(body) || body === "[]" || body === "" || body === "null";
+          /"error"/.test(body) ||
+          /"message"/.test(body) ||
+          body === "[]" ||
+          body === "" ||
+          body === "null";
         if (unusable) {
           toast.info("网易云搜索暂不可用，可继续使用本地文件播放");
         }

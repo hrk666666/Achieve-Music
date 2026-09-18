@@ -1,6 +1,6 @@
 [package]
 name = "achieve-music"
-version = "1.0.1"
+version = "1.0.2"
 description = "Achieve Music - 本地音乐播放器"
 authors = ["hrk666666"]
 edition = "2021"

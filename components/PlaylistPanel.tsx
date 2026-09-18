@@ -365,16 +365,38 @@ const PlaylistPanel: React.FC<PlaylistPanelProps> = ({
                     </div>
 
                     {/* Music Scan Toggle */}
-                    <div className="px-5 py-3 shrink-0 border-t border-white/5 bg-transparent">
-                        <label className="flex items-center justify-between cursor-pointer">
-                            <span className="text-white/60 text-sm font-medium">自动扫描音乐</span>
-                            <button
-                                onClick={onToggleMusicScan}
-                                className={`w-11 h-6 rounded-full transition-colors duration-200 relative ${musicScanEnabled ? 'bg-green-500' : 'bg-white/20'}`}
+                    <div className="px-5 py-3 shrink-0 border-t border-white/5">
+                        <button
+                            role="switch"
+                            aria-checked={musicScanEnabled}
+                            aria-label="自动扫描音乐"
+                            onClick={onToggleMusicScan}
+                            className="w-full flex items-center justify-between gap-3 cursor-pointer group select-none"
+                        >
+                            <span className="text-white/60 text-sm font-medium transition-colors duration-200 group-hover:text-white/90">
+                                自动扫描音乐
+                            </span>
+                            <span
+                                className={`relative inline-flex items-center h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
+                                    musicScanEnabled
+                                        ? ""
+                                        : "bg-white/15 ring-1 ring-white/20"
+                                }`}
+                                style={
+                                    musicScanEnabled
+                                        ? { backgroundColor: accentColor }
+                                        : undefined
+                                }
                             >
-                                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${musicScanEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                            </button>
-                        </label>
+                                <span
+                                    className={`inline-block w-5 h-5 transform rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-transform duration-200 ${
+                                        musicScanEnabled
+                                            ? "translate-x-5"
+                                            : "translate-x-0.5"
+                                    }`}
+                                />
+                            </span>
+                        </button>
                     </div>
 
                 </animated.div>

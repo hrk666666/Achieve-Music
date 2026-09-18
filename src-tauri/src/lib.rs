@@ -511,7 +511,8 @@ fn handle_music_folder(response: &mut Vec<u8>, music_dir: &PathBuf) {
             .collect();
         names.sort();
         for name in names {
-            let url = format!("/music/{}", name);
+            // 文件名（含空格/中文）进行 URL 编码，保证路径可访问且与解码逻辑对应
+            let url = format!("/music/{}", urlencoding::encode(&name));
             let json_name = name.replace('\\', "\\\\").replace('"', "\\\"");
             items.push(format!(r#"{{"name":"{}","url":"{}"}}"#, json_name, url));
         }
@@ -532,7 +533,9 @@ fn handle_music_folder(response: &mut Vec<u8>, music_dir: &PathBuf) {
 fn serve_music_file(path: &str, music_dir: &PathBuf, response: &mut Vec<u8>) {
     let clean = path.trim_start_matches('/');
     let rel = clean.strip_prefix("music/").unwrap_or(clean);
-    let file_path = music_dir.join(rel);
+    // 请求路径是 URL 编码形式（空格->%20 / 中文->%E4...），解码还原为真实文件名，否则查不到文件
+    let rel = url_decode(rel);
+    let file_path = music_dir.join(&rel);
 
     // 防路径穿越
     if !file_path.starts_with(music_dir) {
