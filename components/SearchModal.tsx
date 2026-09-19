@@ -5,6 +5,7 @@ import SmartImage from "./SmartImage";
 import { Song } from "../types";
 import {
   getNeteaseAudioUrl,
+  resolveOnlineAudioUrl,
   NeteaseTrackInfo,
 } from "../services/lyricsService";
 import { useKeyboardScope } from "../hooks/useKeyboardScope";
@@ -235,13 +236,17 @@ const SearchModal: React.FC<SearchModalProps> = ({
     }
   };
 
-  const playNeteaseTrack = (track: NeteaseTrackInfo) => {
+  const playNeteaseTrack = async (track: NeteaseTrackInfo) => {
+    // Pages 版：先解析 302 拿到真实音频 CDN URL
+    const resolvedUrl = track.audioUrl
+      ? await resolveOnlineAudioUrl(track.platform, track.platformId)
+      : undefined;
     const song: Song = {
       id: track.id,
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
-      fileUrl: track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
+      fileUrl: resolvedUrl || track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
@@ -252,13 +257,16 @@ const SearchModal: React.FC<SearchModalProps> = ({
     onImportAndPlay(song);
   };
 
-  const addNeteaseToQueue = (track: NeteaseTrackInfo) => {
+  const addNeteaseToQueue = async (track: NeteaseTrackInfo) => {
+    const resolvedUrl = track.audioUrl
+      ? await resolveOnlineAudioUrl(track.platform, track.platformId)
+      : undefined;
     const song: Song = {
       id: track.id,
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
-      fileUrl: track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
+      fileUrl: resolvedUrl || track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
