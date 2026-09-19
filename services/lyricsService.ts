@@ -15,9 +15,10 @@ interface MetingSong {
   lyric_id: string;
   url_id: string;
   duration?: number;
-  // Pages 环境：直接可用的完整 URL
+  // Pages 环境：直接可用的完整 URL（带 auth 签名）
   _coverUrl?: string;
   _audioUrl?: string;
+  _lrcUrl?: string;
   platform?: string;
 }
 
@@ -33,6 +34,8 @@ export interface TrackInfo {
   platformId: string;
   isNetease?: boolean;
   neteaseId?: string;
+  audioUrl?: string;
+  lrcUrl?: string;
 }
 
 export interface NeteaseTrackInfo extends TrackInfo {
@@ -67,6 +70,7 @@ function convertMeting2(item: any, platform: string): MetingSong | null {
     duration: 0,
     _coverUrl: item.pic || "",
     _audioUrl: item.url || "",
+    _lrcUrl: item.lrc || "",
     platform,
   };
 }
@@ -140,6 +144,8 @@ function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
     platformId: id,
     isNetease: platform === "netease",
     neteaseId: platform === "netease" ? id : undefined,
+    audioUrl: IS_PAGES ? song._audioUrl || undefined : undefined,
+    lrcUrl: IS_PAGES ? song._lrcUrl || undefined : undefined,
   };
 }
 
@@ -235,6 +241,16 @@ export async function searchAndMatchLyrics(
 
     for (const song of songs.slice(0, 8)) {
       if (!song.platformId) continue;
+      // Pages 版：直接用搜索结果里带 auth 的 lrc URL
+      if (IS_PAGES && (song as any).lrcUrl) {
+        try {
+          const resp = await fetch((song as any).lrcUrl);
+          const text = await resp.text();
+          if (text && text.trim()) {
+            return { lrc: text, tLrc: undefined, metadata: [] };
+          }
+        } catch { /* 继续试下一个 */ }
+      }
       const result = await fetchLyricsById(song.platformId, song.platform);
       if (result && result.lrc && result.lrc.trim()) {
         return result;
