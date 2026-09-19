@@ -30,6 +30,8 @@ export interface Song {
   // Multi-platform fallback support
   platform?: string;
   platformId?: string;
+  // Pages 版：带 auth 签名的歌词直链
+  lrcUrl?: string;
 }
 
 export enum PlayState {
