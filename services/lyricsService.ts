@@ -113,7 +113,14 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
         }
       })
     );
-    return results.flat();
+    // 非网易云优先（网易云 VIP 歌多，试听片段概率高）
+    return results
+      .flat()
+      .sort((a, b) => {
+        const ap = a.platform === "netease" ? 1 : 0;
+        const bp = b.platform === "netease" ? 1 : 0;
+        return ap - bp;
+      });
   }
 
   if (type === "lrc") {
