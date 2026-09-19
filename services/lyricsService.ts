@@ -110,17 +110,27 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
     );
     const songs = results.flat();
 
-    // 并行调 i-meto 拿带 auth 的封面 URL（GD API pic 返回的 CDN URL 404）
+    // 并行调 i-meto 拿封面：fetch pic URL 跟随 302 拿最终 CDN URL（有 CORS）
     try {
       const imetoResp = await fetch(
         `https://api.i-meto.com/meting/api?server=netease&type=search&id=${encodeURIComponent(id)}`
       );
       const imetoArr = await imetoResp.json();
       const picMap = new Map<string, string>();
-      for (const item of (Array.isArray(imetoArr) ? imetoArr : [])) {
-        const m = String(item.url || "").match(/[?&]id=([^&]+)/);
-        if (m && item.pic) picMap.set(decodeURIComponent(m[1]), item.pic);
-      }
+      await Promise.all(
+        (Array.isArray(imetoArr) ? imetoArr : []).map(async (item: any) => {
+          const m = String(item.url || "").match(/[?&]id=([^&]+)/);
+          if (!m || !item.pic) return;
+          try {
+            // fetch i-meto pic URL，跟随 302 拿最终 CDN URL
+            const resp = await fetch(item.pic);
+            const finalUrl = resp.url;
+            if (finalUrl && !finalUrl.includes("i-meto.com")) {
+              picMap.set(decodeURIComponent(m[1]), finalUrl);
+            }
+          } catch {}
+        })
+      );
       for (const s of songs) {
         if (!s._coverUrl && s.platform === "netease") {
           const cu = picMap.get(s.id);
