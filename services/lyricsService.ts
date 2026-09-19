@@ -110,44 +110,7 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
         }
       })
     );
-    let songs = results.flat();
-
-    // 并行调 i-meto 搜 tencent + kugou（GD API 不支持这两个平台）
-    try {
-      const extraPlatforms = ["tencent", "kugou"];
-      const extraResults = await Promise.all(
-        extraPlatforms.map(async (p) => {
-          const url = `https://api.i-meto.com/meting/api?server=${p}&type=search&id=${encodeURIComponent(id)}`;
-          try {
-            const resp = await fetch(url);
-            const arr = await resp.json();
-            return (Array.isArray(arr) ? arr : [])
-              .slice(0, 5)
-              .map((item: any) => {
-                const m = String(item.url || "").match(/[?&]id=([^&]+)/);
-                if (!m) return null;
-                const sid = decodeURIComponent(m[1]);
-                return {
-                  id: sid,
-                  name: item.title || "",
-                  artist: item.author || "",
-                  album: "",
-                  pic_id: sid,
-                  lyric_id: sid,
-                  url_id: sid,
-                  duration: 0,
-                  _coverUrl: item.pic || "",
-                  platform: p,
-                } as MetingSong;
-              })
-              .filter(Boolean) as MetingSong[];
-          } catch {
-            return [];
-          }
-        })
-      );
-      songs = [...songs, ...extraResults.flat()];
-    } catch {}
+    const songs = results.flat();
 
     // 填充封面：统一用 DreamMeting pic URL（img 标签直接加载）
     for (const s of songs) {
@@ -160,12 +123,11 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
   }
 
   if (type === "lrc") {
-    // 统一走 DreamMeting 第三方源
+    const url = `${GD_API}?types=lyric&source=${server}&id=${encodeURIComponent(id)}`;
     try {
-      const url = `${DM_API}/?server=${server}&type=lrc&id=${encodeURIComponent(id)}`;
       const resp = await fetch(url);
-      const text = await resp.text();
-      return { lyric: text, tlyric: "" };
+      const data = await resp.json();
+      return { lyric: data?.lyric || "", tlyric: "" };
     } catch {
       return { lyric: "", tlyric: "" };
     }
@@ -210,8 +172,13 @@ export function getAudioUrl(platform: string, id: string): string {
 
 // Pages 版：fetch GD API url 接口，拿真实音频 CDN URL
 export async function resolveOnlineAudioUrl(platform: string, id: string): Promise<string> {
-  // 统一走 DreamMeting 第三方源（netease 完整播放，其他源自动302到音频）
-  return `${DM_API}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
+  const apiUrl = `${GD_API}?types=url&source=${platform}&id=${encodeURIComponent(id)}&br=320`;
+  try {
+    const resp = await fetch(apiUrl);
+    const data = await resp.json();
+    if (data?.url) return data.url;
+  } catch {}
+  return apiUrl;
 }
 
 // Pages 版：fetch GD API pic 接口，拿封面 URL
