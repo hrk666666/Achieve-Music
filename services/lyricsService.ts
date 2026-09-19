@@ -109,16 +109,26 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
       })
     );
     const songs = results.flat();
-    // 批量并行获取封面 URL
-    await Promise.all(
-      songs.map(async (s) => {
-        try {
-          const r = await fetch(`${GD_API}?types=pic&source=${s.platform}&id=${s.pic_id}`);
-          const d = await r.json();
-          if (d?.url) s._coverUrl = d.url;
-        } catch {}
-      })
-    );
+
+    // 并行调 i-meto 拿带 auth 的封面 URL（GD API pic 返回的 CDN URL 404）
+    try {
+      const imetoResp = await fetch(
+        `https://api.i-meto.com/meting/api?server=netease&type=search&id=${encodeURIComponent(id)}`
+      );
+      const imetoArr = await imetoResp.json();
+      const picMap = new Map<string, string>();
+      for (const item of (Array.isArray(imetoArr) ? imetoArr : [])) {
+        const m = String(item.url || "").match(/[?&]id=([^&]+)/);
+        if (m && item.pic) picMap.set(decodeURIComponent(m[1]), item.pic);
+      }
+      for (const s of songs) {
+        if (!s._coverUrl && s.platform === "netease") {
+          const cu = picMap.get(s.id);
+          if (cu) s._coverUrl = cu;
+        }
+      }
+    } catch {}
+
     return songs;
   }
 
@@ -140,8 +150,7 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
 // 将 Meting 返回格式转为 TrackInfo
 function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
   const id = song.id || song.url_id;
-  // Pages 版直接用 meting 返回的完整封面 URL；桌面版走本地代理
-  // Pages 版：封面用搜索时批量获取的 _coverUrl
+  // Pages 版：封面用 i-meto 带 auth 的 pic URL
   const coverUrl = IS_PAGES
     ? song._coverUrl
     : song.pic_id
@@ -183,13 +192,8 @@ export async function resolveOnlineAudioUrl(platform: string, id: string): Promi
 }
 
 // Pages 版：fetch GD API pic 接口，拿封面 URL
-export async function resolveOnlineCoverUrl(platform: string, id: string): Promise<string | undefined> {
-  const apiUrl = `${GD_API}?types=pic&source=${platform}&id=${encodeURIComponent(id)}`;
-  try {
-    const resp = await fetch(apiUrl);
-    const data = await resp.json();
-    if (data?.url) return data.url;
-  } catch {}
+export async function resolveOnlineCoverUrl(_platform: string, _id: string): Promise<string | undefined> {
+  // 封面已在搜索时通过 i-meto 带 auth URL 填入，这里不再额外请求
   return undefined;
 }
 
