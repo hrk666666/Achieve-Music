@@ -1,11 +1,9 @@
 // 本地音乐 API（Vite 中间件，数据不出境，直连国内音乐平台）
 const API_BASE = "/api/music";
 
-// Pages 环境检测：无 Rust 后端，直连第三方音乐 API（CORS 开放）
+// Pages 环境检测：无 Rust 后端，直连 GD Studio API（CORS 开放，支持完整歌曲）
 const IS_PAGES = window.location.hostname.includes("github.io");
 const GD_API = "https://music-api.gdstudio.xyz/api.php";
-// DreamMeting 第三方源：netease 完整播放 + 封面 + 歌词
-const DM_API = "https://music.3e0.cn";
 
 // Meting 统一返回格式
 interface MetingSong {
@@ -91,35 +89,21 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
     return response.json();
   }
 
-  // Pages 版：直接调 GD API
+  // Pages 版：直接调 GD API（一次请求同时搜 netease+kuwo）
   if (type === "search") {
-    // GD API 支持 netease + kuwo
-    const platforms = ["netease", "kuwo"];
-    const results = await Promise.all(
-      platforms.map(async (p) => {
-        const url = `${GD_API}?types=search&source=${p}&name=${encodeURIComponent(id)}&count=10`;
-        try {
-          const resp = await fetch(url);
-          const arr = await resp.json();
-          return (Array.isArray(arr) ? arr : [])
-            .slice(0, 10)
-            .map((item) => convertGdItem(item, p))
-            .filter(Boolean) as MetingSong[];
-        } catch {
-          return [];
-        }
-      })
-    );
-    const songs = results.flat();
-
-    // 填充封面：统一用 DreamMeting pic URL（img 标签直接加载）
-    for (const s of songs) {
-      if (!s._coverUrl && s.pic_id) {
-        s._coverUrl = `${DM_API}/?server=${s.platform || "netease"}&type=pic&id=${encodeURIComponent(s.pic_id)}`;
-      }
+    const url = `${GD_API}?types=search&source=netease,kuwo&name=${encodeURIComponent(id)}&count=100`;
+    try {
+      const resp = await fetch(url);
+      const arr = await resp.json();
+      return (Array.isArray(arr) ? arr : [])
+        .map((item: any) => {
+          const platform = item.source || "netease";
+          return convertGdItem(item, platform);
+        })
+        .filter(Boolean) as MetingSong[];
+    } catch {
+      return [];
     }
-
-    return songs;
   }
 
   if (type === "lrc") {
@@ -172,7 +156,8 @@ export function getAudioUrl(platform: string, id: string): string {
 
 // Pages 版：fetch GD API url 接口，拿真实音频 CDN URL
 export async function resolveOnlineAudioUrl(platform: string, id: string): Promise<string> {
-  const apiUrl = `${GD_API}?types=url&source=${platform}&id=${encodeURIComponent(id)}&br=320`;
+  // 照搬开源方案：fetch GD API url 接口，拿 JSON 里的真实音频 URL
+  const apiUrl = `${GD_API}?types=url&source=${platform}&id=${encodeURIComponent(id)}&br=320000`;
   try {
     const resp = await fetch(apiUrl);
     const data = await resp.json();
@@ -181,10 +166,9 @@ export async function resolveOnlineAudioUrl(platform: string, id: string): Promi
   return apiUrl;
 }
 
-// Pages 版：fetch GD API pic 接口，拿封面 URL
-export async function resolveOnlineCoverUrl(_platform: string, _id: string): Promise<string | undefined> {
-  // 封面已在搜索时通过 i-meto 带 auth URL 填入，这里不再额外请求
-  return undefined;
+// Pages 版：封面用 GD API pic 接口
+export async function resolveOnlineCoverUrl(platform: string, id: string): Promise<string | undefined> {
+  return `${GD_API}?types=pic&source=${platform}&id=${encodeURIComponent(id)}`;
 }
 
 // 兼容旧接口
