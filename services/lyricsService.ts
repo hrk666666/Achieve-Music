@@ -108,7 +108,18 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
         }
       })
     );
-    return results.flat();
+    const songs = results.flat();
+    // 批量并行获取封面 URL
+    await Promise.all(
+      songs.map(async (s) => {
+        try {
+          const r = await fetch(`${GD_API}?types=pic&source=${s.platform}&id=${s.pic_id}`);
+          const d = await r.json();
+          if (d?.url) s._coverUrl = d.url;
+        } catch {}
+      })
+    );
+    return songs;
   }
 
   if (type === "lrc") {
@@ -130,9 +141,9 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
 function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
   const id = song.id || song.url_id;
   // Pages 版直接用 meting 返回的完整封面 URL；桌面版走本地代理
-  // Pages 版：封面/音频/歌词点歌时动态解析
+  // Pages 版：封面用搜索时批量获取的 _coverUrl
   const coverUrl = IS_PAGES
-    ? undefined
+    ? song._coverUrl
     : song.pic_id
     ? `${API_BASE}?server=${platform}&type=pic&id=${song.pic_id}`
     : undefined;
