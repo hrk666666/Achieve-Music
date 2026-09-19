@@ -92,15 +92,35 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
   // Pages 版：直接调 GD API（只搜 netease，kuwo 播放返回空）
   if (type === "search") {
     const url = `${GD_API}?types=search&source=netease&name=${encodeURIComponent(id)}&count=30`;
+    let songs: MetingSong[] = [];
     try {
       const resp = await fetch(url);
       const arr = await resp.json();
-      return (Array.isArray(arr) ? arr : [])
+      songs = (Array.isArray(arr) ? arr : [])
         .map((item: any) => convertGdItem(item, "netease"))
         .filter(Boolean) as MetingSong[];
-    } catch {
-      return [];
-    }
+    } catch {}
+
+    // 并行调 i-meto 拿封面 URL（GD API pic 接口返回空）
+    try {
+      const imetoResp = await fetch(
+        `https://api.i-meto.com/meting/api?server=netease&type=search&id=${encodeURIComponent(id)}`
+      );
+      const imetoArr = await imetoResp.json();
+      const picMap = new Map<string, string>();
+      for (const item of (Array.isArray(imetoArr) ? imetoArr : [])) {
+        const m = String(item.url || "").match(/[?&]id=([^&]+)/);
+        if (m && item.pic) picMap.set(decodeURIComponent(m[1]), item.pic);
+      }
+      for (const s of songs) {
+        if (!s._coverUrl) {
+          const cu = picMap.get(s.id);
+          if (cu) s._coverUrl = cu;
+        }
+      }
+    } catch {}
+
+    return songs;
   }
 
   if (type === "lrc") {
