@@ -241,12 +241,13 @@ const SearchModal: React.FC<SearchModalProps> = ({
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
-      fileUrl: getNeteaseAudioUrl(track.neteaseId),
+      fileUrl: track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
       lyrics: [],
       needsLyricsMatch: true,
+      lrcUrl: track.lrcUrl,
     };
     onImportAndPlay(song);
   };
@@ -257,12 +258,13 @@ const SearchModal: React.FC<SearchModalProps> = ({
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
-      fileUrl: getNeteaseAudioUrl(track.neteaseId),
+      fileUrl: track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
       album: track.album,
       lyrics: [],
       needsLyricsMatch: true,
+      lrcUrl: track.lrcUrl,
     };
     onAddToQueue(song);
   };
