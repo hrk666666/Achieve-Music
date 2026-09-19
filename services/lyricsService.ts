@@ -1,9 +1,11 @@
 // 本地音乐 API（Vite 中间件，数据不出境，直连国内音乐平台）
 const API_BASE = "/api/music";
 
-// Pages 环境检测：无 Rust 后端，直连 GD Studio API（CORS 开放，支持完整歌曲）
+// Pages 环境检测：无 Rust 后端，直连第三方音乐 API（CORS 开放）
 const IS_PAGES = window.location.hostname.includes("github.io");
 const GD_API = "https://music-api.gdstudio.xyz/api.php";
+// DreamMeting 第三方源：netease 完整播放 + 封面 + 歌词
+const DM_API = "https://music.3e0.cn";
 
 // Meting 统一返回格式
 interface MetingSong {
@@ -108,36 +110,62 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
         }
       })
     );
-    const songs = results.flat();
+    let songs = results.flat();
 
-    // 并行调 i-meto netease 拿封面 URL
+    // 并行调 i-meto 搜 tencent + kugou（GD API 不支持这两个平台）
     try {
-      const imetoResp = await fetch(
-        `https://api.i-meto.com/meting/api?server=netease&type=search&id=${encodeURIComponent(id)}`
+      const extraPlatforms = ["tencent", "kugou"];
+      const extraResults = await Promise.all(
+        extraPlatforms.map(async (p) => {
+          const url = `https://api.i-meto.com/meting/api?server=${p}&type=search&id=${encodeURIComponent(id)}`;
+          try {
+            const resp = await fetch(url);
+            const arr = await resp.json();
+            return (Array.isArray(arr) ? arr : [])
+              .slice(0, 5)
+              .map((item: any) => {
+                const m = String(item.url || "").match(/[?&]id=([^&]+)/);
+                if (!m) return null;
+                const sid = decodeURIComponent(m[1]);
+                return {
+                  id: sid,
+                  name: item.title || "",
+                  artist: item.author || "",
+                  album: "",
+                  pic_id: sid,
+                  lyric_id: sid,
+                  url_id: sid,
+                  duration: 0,
+                  _coverUrl: item.pic || "",
+                  platform: p,
+                } as MetingSong;
+              })
+              .filter(Boolean) as MetingSong[];
+          } catch {
+            return [];
+          }
+        })
       );
-      const imetoArr = await imetoResp.json();
-      const picMap = new Map<string, string>();
-      for (const item of (Array.isArray(imetoArr) ? imetoArr : [])) {
-        const m = String(item.url || "").match(/[?&]id=([^&]+)/);
-        if (m && item.pic) picMap.set(decodeURIComponent(m[1]), item.pic);
-      }
-      for (const s of songs) {
-        if (!s._coverUrl && s.platform === "netease") {
-          const cu = picMap.get(s.id);
-          if (cu) s._coverUrl = cu;
-        }
-      }
+      songs = [...songs, ...extraResults.flat()];
     } catch {}
+
+    // 填充封面：统一用 DreamMeting pic URL（img 标签直接加载）
+    for (const s of songs) {
+      if (!s._coverUrl && s.pic_id) {
+        s._coverUrl = `${DM_API}/?server=${s.platform || "netease"}&type=pic&id=${encodeURIComponent(s.pic_id)}`;
+      }
+    }
 
     return songs;
   }
 
   if (type === "lrc") {
-    const url = `${GD_API}?types=lyric&source=${server}&id=${encodeURIComponent(id)}`;
+    // 统一走 DreamMeting 第三方源
     try {
+      const url = `${DM_API}/?server=${server}&type=lrc&id=${encodeURIComponent(id)}`;
       const resp = await fetch(url);
-      const data = await resp.json();
-      return { lyric: data?.lyric || "", tlyric: "" };
+      const text = await resp.text();
+      return { lyric: text, tlyric: "" };
     } catch {
       return { lyric: "", tlyric: "" };
     }
@@ -182,13 +210,8 @@ export function getAudioUrl(platform: string, id: string): string {
 
 // Pages 版：fetch GD API url 接口，拿真实音频 CDN URL
 export async function resolveOnlineAudioUrl(platform: string, id: string): Promise<string> {
-  const apiUrl = `${GD_API}?types=url&source=${platform}&id=${encodeURIComponent(id)}&br=320`;
-  try {
-    const resp = await fetch(apiUrl);
-    const data = await resp.json();
-    if (data?.url) return data.url;
-  } catch {}
-  return apiUrl;
+  // 统一走 DreamMeting 第三方源（netease 完整播放，其他源自动302到音频）
+  return `${DM_API}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
 }
 
 // Pages 版：fetch GD API pic 接口，拿封面 URL
