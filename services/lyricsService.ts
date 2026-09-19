@@ -1,6 +1,10 @@
 // 本地音乐 API（Vite 中间件，数据不出境，直连国内音乐平台）
 const API_BASE = "/api/music";
 
+// Pages 环境检测：无 Rust 后端，直连 meting API（meting 已允许 CORS）
+const IS_PAGES = window.location.hostname.includes("github.io");
+const METING_BASE = "https://api.i-meto.com/meting/api";
+
 // Meting 统一返回格式
 interface MetingSong {
   id: string;
@@ -11,6 +15,10 @@ interface MetingSong {
   lyric_id: string;
   url_id: string;
   duration?: number;
+  // Pages 环境：直接可用的完整 URL
+  _coverUrl?: string;
+  _audioUrl?: string;
+  platform?: string;
 }
 
 // 统一 Track 接口
@@ -37,27 +45,96 @@ type SearchOptions = {
   offset?: number;
 };
 
-// 从本地 API 获取数据
+// 从 meting URL 中提取 id 参数
+function extractMetingId(url: string): string {
+  const m = url.match(/[?&]id=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
+// 把 Meting2 返回的 {title,author,url,pic,lrc} 转成内部格式
+function convertMeting2(item: any, platform: string): MetingSong | null {
+  const songId = extractMetingId(item.url || "");
+  if (!songId || songId === "undefined") return null;
+  if (!item.title && !item.author) return null;
+  return {
+    id: songId,
+    name: item.title || "",
+    artist: item.author || "",
+    album: "",
+    pic_id: extractMetingId(item.pic || "") || songId,
+    lyric_id: extractMetingId(item.lrc || "") || songId,
+    url_id: songId,
+    duration: 0,
+    _coverUrl: item.pic || "",
+    _audioUrl: item.url || "",
+    platform,
+  };
+}
+
+// 从本地 API 获取数据（桌面版走 Rust 代理，Pages 版直连 meting）
 async function fetchApi(params: Record<string, string>): Promise<any> {
-  const url = new URL(API_BASE, window.location.origin);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `API 请求失败: ${response.status}`);
+  const { server, type, id } = params;
+
+  // 桌面版：走本地 Rust 代理
+  if (!IS_PAGES) {
+    const url = new URL(API_BASE, window.location.origin);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API 请求失败: ${response.status}`);
+    }
+    return response.json();
   }
-  return response.json();
+
+  // Pages 版：直接调 meting
+  if (type === "search") {
+    // 多平台并行搜索
+    const platforms = ["netease", "tencent", "kugou", "kuwo"];
+    const results = await Promise.all(
+      platforms.map(async (p) => {
+        const url = `${METING_BASE}?server=${p}&type=search&id=${encodeURIComponent(id)}`;
+        try {
+          const resp = await fetch(url);
+          const arr = await resp.json();
+          return (Array.isArray(arr) ? arr : [])
+            .slice(0, 8)
+            .map((item) => convertMeting2(item, p))
+            .filter(Boolean) as MetingSong[];
+        } catch {
+          return [];
+        }
+      })
+    );
+    return results.flat();
+  }
+
+  if (type === "lrc") {
+    const url = `${METING_BASE}?server=${server}&type=lrc&id=${encodeURIComponent(id)}`;
+    const resp = await fetch(url);
+    const text = await resp.text();
+    return { lyric: text, tlyric: "" };
+  }
+
+  // pic / url 不需要走这里（搜索结果已带完整 URL）
+  return null;
 }
 
 // 将 Meting 返回格式转为 TrackInfo
 function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
   const id = song.id || song.url_id;
+  // Pages 版直接用 meting 返回的完整封面 URL；桌面版走本地代理
+  const coverUrl = IS_PAGES
+    ? song._coverUrl || undefined
+    : song.pic_id
+    ? `${API_BASE}?server=${platform}&type=pic&id=${song.pic_id}`
+    : undefined;
   return {
     id: `${platform}-${id}`,
     title: song.name?.trim() ?? "",
     artist: song.artist?.trim() ?? "",
     album: song.album?.trim() ?? "",
-    coverUrl: song.pic_id ? `${API_BASE}?server=${platform}&type=pic&id=${song.pic_id}` : undefined,
+    coverUrl,
     duration: song.duration,
     platform,
     platformId: id,
@@ -66,8 +143,11 @@ function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
   };
 }
 
-// 获取音频播放地址（直接作为 audio src，302 重定向到真实音频）
+// 获取音频播放地址
 export function getAudioUrl(platform: string, id: string): string {
+  if (IS_PAGES) {
+    return `${METING_BASE}?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
+  }
   return `${API_BASE}?server=${platform}&type=url&id=${id}`;
 }
 
@@ -87,7 +167,7 @@ export async function searchNetEase(
       type: "search",
       id: keyword,
     });
-    return songs.map((s) => mapMetingToTrack(s, "netease") as NeteaseTrackInfo);
+    return songs.map((s) => mapMetingToTrack(s, s.platform || "netease") as NeteaseTrackInfo);
   } catch (error) {
     return [];
   }
@@ -144,7 +224,7 @@ export async function fetchTracksFromPlatform(
   }
 }
 
-// 歌词匹配（用于本地文件自动匹配歌词）
+// 歌词匹配（用于本地文件自动匹配歌词）：遍历多平台搜索结果依次取歌词
 export async function searchAndMatchLyrics(
   title: string,
   artist: string,
@@ -153,7 +233,6 @@ export async function searchAndMatchLyrics(
     const songs = await searchNetEase(`${title} ${artist}`, { limit: 8 });
     if (songs.length === 0) return null;
 
-    // 依次尝试每个平台结果，取第一个有歌词的
     for (const song of songs.slice(0, 8)) {
       if (!song.platformId) continue;
       const result = await fetchLyricsById(song.platformId, song.platform);
@@ -167,7 +246,7 @@ export async function searchAndMatchLyrics(
   }
 }
 
-// 过滤网易云 LRC 开头的歌曲元数据行（作词/作曲/编曲等），避免显示为歌词
+// 过滤 LRC 开头的歌曲元数据行
 const METADATA_LINE = /^\[\d{2}:\d{2}[.:]\d{2,3}\]\s*(作曲|作词|编曲|制作人|制作|改编|OP|SP|词曲)(\s*[:：]|$)/;
 
 // 获取歌词
@@ -187,7 +266,6 @@ export async function fetchLyricsById(
 
     if (!rawLrc) return null;
 
-    // 清洗歌词：去掉空行和歌曲元数据行
     const cleanLrc = rawLrc
       .split("\n")
       .filter((line: string) => {
