@@ -6,6 +6,7 @@ import { Song } from "../types";
 import {
   getNeteaseAudioUrl,
   resolveOnlineAudioUrl,
+  resolveOnlineCoverUrl,
   NeteaseTrackInfo,
 } from "../services/lyricsService";
 import { useKeyboardScope } from "../hooks/useKeyboardScope";
@@ -237,15 +238,16 @@ const SearchModal: React.FC<SearchModalProps> = ({
   };
 
   const playNeteaseTrack = async (track: NeteaseTrackInfo) => {
-    // Pages 版：先解析 302 拿到真实音频 CDN URL
-    const resolvedUrl = track.audioUrl
-      ? await resolveOnlineAudioUrl(track.platform, track.platformId)
-      : undefined;
+    // Pages 版：并行解析音频和封面
+    const [resolvedUrl, resolvedCover] = await Promise.all([
+      resolveOnlineAudioUrl(track.platform, track.platformId),
+      resolveOnlineCoverUrl(track.platform, track.platformId),
+    ]);
     const song: Song = {
       id: track.id,
       title: track.title,
       artist: track.artist,
-      coverUrl: track.coverUrl,
+      coverUrl: resolvedCover || track.coverUrl,
       fileUrl: resolvedUrl || track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
@@ -258,14 +260,15 @@ const SearchModal: React.FC<SearchModalProps> = ({
   };
 
   const addNeteaseToQueue = async (track: NeteaseTrackInfo) => {
-    const resolvedUrl = track.audioUrl
-      ? await resolveOnlineAudioUrl(track.platform, track.platformId)
-      : undefined;
+    const [resolvedUrl, resolvedCover] = await Promise.all([
+      resolveOnlineAudioUrl(track.platform, track.platformId),
+      resolveOnlineCoverUrl(track.platform, track.platformId),
+    ]);
     const song: Song = {
       id: track.id,
       title: track.title,
       artist: track.artist,
-      coverUrl: track.coverUrl,
+      coverUrl: resolvedCover || track.coverUrl,
       fileUrl: resolvedUrl || track.audioUrl || getNeteaseAudioUrl(track.neteaseId),
       isNetease: true,
       neteaseId: track.neteaseId,
