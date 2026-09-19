@@ -3,7 +3,9 @@ const API_BASE = "/api/music";
 
 // Pages 环境检测：无 Rust 后端，直连 meting API（meting 已允许 CORS）
 const IS_PAGES = window.location.hostname.includes("github.io");
-const METING_BASE = "https://api.i-meto.com/meting/api";
+const METING_SEARCH_BASE = "https://api.i-meto.com/meting/api";
+// injahow 实例：url/lrc/pic 直接 302 到真实资源，无需 auth 签名
+const METING_PLAYER_BASE = "https://api.injahow.cn/meting";
 
 // Meting 统一返回格式
 interface MetingSong {
@@ -64,13 +66,14 @@ function convertMeting2(item: any, platform: string): MetingSong | null {
     name: item.title || "",
     artist: item.author || "",
     album: "",
-    pic_id: extractMetingId(item.pic || "") || songId,
-    lyric_id: extractMetingId(item.lrc || "") || songId,
+    pic_id: songId,
+    lyric_id: songId,
     url_id: songId,
     duration: 0,
-    _coverUrl: item.pic || "",
-    _audioUrl: item.url || "",
-    _lrcUrl: item.lrc || "",
+    // Pages 版：用 injahow 实例拼直接可播放/加载的 URL（302 到真实资源）
+    _coverUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=pic&id=${encodeURIComponent(songId)}`,
+    _audioUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(songId)}`,
+    _lrcUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=lrc&id=${encodeURIComponent(songId)}`,
     platform,
   };
 }
@@ -93,11 +96,11 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
 
   // Pages 版：直接调 meting
   if (type === "search") {
-    // 多平台并行搜索
+    // 多平台并行搜索（用 i-meto，它的 search 正常）
     const platforms = ["netease", "tencent", "kugou", "kuwo"];
     const results = await Promise.all(
       platforms.map(async (p) => {
-        const url = `${METING_BASE}?server=${p}&type=search&id=${encodeURIComponent(id)}`;
+        const url = `${METING_SEARCH_BASE}?server=${p}&type=search&id=${encodeURIComponent(id)}`;
         try {
           const resp = await fetch(url);
           const arr = await resp.json();
@@ -152,7 +155,7 @@ function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
 // 获取音频播放地址
 export function getAudioUrl(platform: string, id: string): string {
   if (IS_PAGES) {
-    return `${METING_BASE}?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
+    return `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
   }
   return `${API_BASE}?server=${platform}&type=url&id=${id}`;
 }
