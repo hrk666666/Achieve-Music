@@ -70,8 +70,8 @@ function convertMeting2(item: any, platform: string): MetingSong | null {
     lyric_id: songId,
     url_id: songId,
     duration: 0,
-    // Pages 版：用 injahow 实例拼直接可播放/加载的 URL（302 到真实资源）
-    _coverUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=pic&id=${encodeURIComponent(songId)}`,
+    // Pages 版：封面用 i-meto 搜索结果里带 auth 的完整链接（img 跟随 302）
+    _coverUrl: item.pic || "",
     _audioUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(songId)}`,
     _lrcUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=lrc&id=${encodeURIComponent(songId)}`,
     platform,
@@ -158,6 +158,19 @@ export function getAudioUrl(platform: string, id: string): string {
     return `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
   }
   return `${API_BASE}?server=${platform}&type=url&id=${id}`;
+}
+
+// Pages 版：fetch injahow url 接口，拿 302 后的真实音频 CDN URL
+export async function resolveOnlineAudioUrl(platform: string, id: string): Promise<string> {
+  const metingUrl = `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
+  try {
+    const resp = await fetch(metingUrl, { method: "GET" });
+    // response.url 是 302 重定向后的最终 URL
+    if (resp.url && resp.url !== metingUrl) {
+      return resp.url;
+    }
+  } catch {}
+  return metingUrl;
 }
 
 // 兼容旧接口
