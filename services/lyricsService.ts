@@ -1,11 +1,9 @@
 // 本地音乐 API（Vite 中间件，数据不出境，直连国内音乐平台）
 const API_BASE = "/api/music";
 
-// Pages 环境检测：无 Rust 后端，直连 meting API（meting 已允许 CORS）
+// Pages 环境检测：无 Rust 后端，直连 GD Studio API（CORS 开放，支持完整歌曲）
 const IS_PAGES = window.location.hostname.includes("github.io");
-const METING_SEARCH_BASE = "https://api.i-meto.com/meting/api";
-// injahow 实例：url/lrc/pic 直接 302 到真实资源，无需 auth 签名
-const METING_PLAYER_BASE = "https://api.injahow.cn/meting";
+const GD_API = "https://music-api.gdstudio.xyz/api.php";
 
 // Meting 统一返回格式
 interface MetingSong {
@@ -56,24 +54,21 @@ function extractMetingId(url: string): string {
   return m ? decodeURIComponent(m[1]) : "";
 }
 
-// 把 Meting2 返回的 {title,author,url,pic,lrc} 转成内部格式
-function convertMeting2(item: any, platform: string): MetingSong | null {
-  const songId = extractMetingId(item.url || "");
+// GD API 搜索返回的 item 转成 MetingSong
+function convertGdItem(item: any, platform: string): MetingSong | null {
+  const songId = String(item.id || "");
   if (!songId || songId === "undefined") return null;
-  if (!item.title && !item.author) return null;
+  if (!item.name) return null;
+  const artists = Array.isArray(item.artist) ? item.artist.join(" / ") : (item.artist || "");
   return {
     id: songId,
-    name: item.title || "",
-    artist: item.author || "",
-    album: "",
-    pic_id: songId,
-    lyric_id: songId,
-    url_id: songId,
+    name: item.name || "",
+    artist: artists,
+    album: item.album || "",
+    pic_id: String(item.pic_id || songId),
+    lyric_id: String(item.lyric_id || songId),
+    url_id: String(item.url_id || songId),
     duration: 0,
-    // Pages 版：封面用 i-meto 搜索结果里带 auth 的完整链接（img 跟随 302）
-    _coverUrl: item.pic || "",
-    _audioUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(songId)}`,
-    _lrcUrl: `${METING_PLAYER_BASE}/?server=${platform}&type=lrc&id=${encodeURIComponent(songId)}`,
     platform,
   };
 }
@@ -94,43 +89,40 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
     return response.json();
   }
 
-  // Pages 版：直接调 meting
+  // Pages 版：直接调 GD API
   if (type === "search") {
-    // 多平台并行搜索（用 i-meto，它的 search 正常）
-    const platforms = ["netease", "tencent", "kugou", "kuwo"];
+    // GD API 支持 netease + kuwo
+    const platforms = ["netease", "kuwo"];
     const results = await Promise.all(
       platforms.map(async (p) => {
-        const url = `${METING_SEARCH_BASE}?server=${p}&type=search&id=${encodeURIComponent(id)}`;
+        const url = `${GD_API}?types=search&source=${p}&name=${encodeURIComponent(id)}&count=10`;
         try {
           const resp = await fetch(url);
           const arr = await resp.json();
           return (Array.isArray(arr) ? arr : [])
-            .slice(0, 8)
-            .map((item) => convertMeting2(item, p))
+            .slice(0, 10)
+            .map((item) => convertGdItem(item, p))
             .filter(Boolean) as MetingSong[];
         } catch {
           return [];
         }
       })
     );
-    // 非网易云优先（网易云 VIP 歌多，试听片段概率高）
-    return results
-      .flat()
-      .sort((a, b) => {
-        const ap = a.platform === "netease" ? 1 : 0;
-        const bp = b.platform === "netease" ? 1 : 0;
-        return ap - bp;
-      });
+    return results.flat();
   }
 
   if (type === "lrc") {
-    const url = `${METING_BASE}?server=${server}&type=lrc&id=${encodeURIComponent(id)}`;
-    const resp = await fetch(url);
-    const text = await resp.text();
-    return { lyric: text, tlyric: "" };
+    const url = `${GD_API}?types=lyric&source=${server}&id=${encodeURIComponent(id)}`;
+    try {
+      const resp = await fetch(url);
+      const data = await resp.json();
+      return { lyric: data?.lyric || "", tlyric: "" };
+    } catch {
+      return { lyric: "", tlyric: "" };
+    }
   }
 
-  // pic / url 不需要走这里（搜索结果已带完整 URL）
+  // pic / url 不需要走这里
   return null;
 }
 
@@ -138,8 +130,9 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
 function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
   const id = song.id || song.url_id;
   // Pages 版直接用 meting 返回的完整封面 URL；桌面版走本地代理
+  // Pages 版：封面/音频/歌词点歌时动态解析
   const coverUrl = IS_PAGES
-    ? song._coverUrl || undefined
+    ? undefined
     : song.pic_id
     ? `${API_BASE}?server=${platform}&type=pic&id=${song.pic_id}`
     : undefined;
@@ -154,30 +147,39 @@ function mapMetingToTrack(song: MetingSong, platform: string): TrackInfo {
     platformId: id,
     isNetease: platform === "netease",
     neteaseId: platform === "netease" ? id : undefined,
-    audioUrl: IS_PAGES ? song._audioUrl || undefined : undefined,
-    lrcUrl: IS_PAGES ? song._lrcUrl || undefined : undefined,
+    audioUrl: undefined,
+    lrcUrl: undefined,
   };
 }
 
 // 获取音频播放地址
 export function getAudioUrl(platform: string, id: string): string {
   if (IS_PAGES) {
-    return `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
+    return `${GD_API}?types=url&source=${platform}&id=${encodeURIComponent(id)}&br=320`;
   }
   return `${API_BASE}?server=${platform}&type=url&id=${id}`;
 }
 
-// Pages 版：fetch injahow url 接口，拿 302 后的真实音频 CDN URL
+// Pages 版：fetch GD API url 接口，拿真实音频 CDN URL
 export async function resolveOnlineAudioUrl(platform: string, id: string): Promise<string> {
-  const metingUrl = `${METING_PLAYER_BASE}/?server=${platform}&type=url&id=${encodeURIComponent(id)}`;
+  const apiUrl = `${GD_API}?types=url&source=${platform}&id=${encodeURIComponent(id)}&br=320`;
   try {
-    const resp = await fetch(metingUrl, { method: "GET" });
-    // response.url 是 302 重定向后的最终 URL
-    if (resp.url && resp.url !== metingUrl) {
-      return resp.url;
-    }
+    const resp = await fetch(apiUrl);
+    const data = await resp.json();
+    if (data?.url) return data.url;
   } catch {}
-  return metingUrl;
+  return apiUrl;
+}
+
+// Pages 版：fetch GD API pic 接口，拿封面 URL
+export async function resolveOnlineCoverUrl(platform: string, id: string): Promise<string | undefined> {
+  const apiUrl = `${GD_API}?types=pic&source=${platform}&id=${encodeURIComponent(id)}`;
+  try {
+    const resp = await fetch(apiUrl);
+    const data = await resp.json();
+    if (data?.url) return data.url;
+  } catch {}
+  return undefined;
 }
 
 // 兼容旧接口
