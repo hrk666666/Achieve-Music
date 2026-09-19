@@ -527,16 +527,22 @@ export const usePlayer = ({
     const handleAudioError = () => {
       audio.pause();
       audio.currentTime = 0;
-      setPlayState(PlayState.PAUSED);
-      setCurrentTime(0);
-      setAudioError("音频加载失败：可能是网络连接问题，或该歌曲需要 VIP 权限。已自动停止播放。");
+      // 播放失败自动切下一首（可能是 VIP 或试听片段）
+      if (queue.length > 1) {
+        setAudioError(null);
+        playNext();
+      } else {
+        setPlayState(PlayState.PAUSED);
+        setCurrentTime(0);
+        setAudioError("音频加载失败：可能是网络连接问题，或该歌曲需要 VIP 权限。");
+      }
     };
 
     audio.addEventListener("error", handleAudioError);
     return () => {
       audio.removeEventListener("error", handleAudioError);
     };
-  }, [audioRef]);
+  }, [audioRef, playNext, queue.length]);
 
   // Provide high-precision time updates directly from the native audio element
   useEffect(() => {
