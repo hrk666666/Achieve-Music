@@ -457,6 +457,25 @@ export const usePlayer = ({
           }
         }
 
+        // Pages 版：在线歌曲直接用搜索结果里带 auth 的 lrc 链接
+        if (currentSong.lrcUrl) {
+          try {
+            const resp = await withTimeout(
+              fetch(currentSong.lrcUrl),
+              MATCH_TIMEOUT_MS,
+            );
+            const text = await resp.text();
+            if (text && text.trim() && !cancelled) {
+              updateSongInQueue(songId, {
+                lyrics: mergeLyricsWithMetadata({ lrc: text, tLrc: undefined, metadata: [] }),
+                needsLyricsMatch: false,
+              });
+              markMatchSuccess();
+              return;
+            }
+          } catch { /* 继续走下方逻辑 */ }
+        }
+
         if (isNeteaseSong && songNeteaseId) {
           const raw = await withTimeout(
             fetchLyricsById(songNeteaseId),
