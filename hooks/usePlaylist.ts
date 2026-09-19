@@ -372,7 +372,7 @@ export const usePlaylist = () => {
           songs.forEach((song: TrackInfo) => {
             newSongs.push({
               ...song,
-              fileUrl: getAudioUrl(song.platform, song.platformId),
+              fileUrl: song.audioUrl || getAudioUrl(song.platform, song.platformId),
               lyrics: [],
               colors: [],
               needsLyricsMatch: true,
