@@ -89,24 +89,18 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
     return response.json();
   }
 
-  // Pages 版：直接调 GD API（一次请求同时搜 netease+kuwo）
+  // Pages 版：直接调 GD API（只搜 netease，kuwo 播放返回空）
   if (type === "search") {
-    const platforms = ["netease", "kuwo"];
-    const results = await Promise.all(
-      platforms.map(async (p) => {
-        const url = `${GD_API}?types=search&source=${p}&name=${encodeURIComponent(id)}&count=20`;
-        try {
-          const resp = await fetch(url);
-          const arr = await resp.json();
-          return (Array.isArray(arr) ? arr : [])
-            .map((item: any) => convertGdItem(item, p))
-            .filter(Boolean) as MetingSong[];
-        } catch {
-          return [];
-        }
-      })
-    );
-    return results.flat();
+    const url = `${GD_API}?types=search&source=netease&name=${encodeURIComponent(id)}&count=30`;
+    try {
+      const resp = await fetch(url);
+      const arr = await resp.json();
+      return (Array.isArray(arr) ? arr : [])
+        .map((item: any) => convertGdItem(item, "netease"))
+        .filter(Boolean) as MetingSong[];
+    } catch {
+      return [];
+    }
   }
 
   if (type === "lrc") {
