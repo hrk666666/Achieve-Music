@@ -92,23 +92,35 @@ async function fetchApi(params: Record<string, string>): Promise<any> {
   // Pages 版：直接调 GD API（只搜 netease，kuwo 播放返回空）
   if (type === "search") {
     const url = `${GD_API}?types=search&source=netease&name=${encodeURIComponent(id)}&count=30`;
+    let songs: MetingSong[] = [];
     try {
       const resp = await fetch(url);
       const arr = await resp.json();
-      const songs = (Array.isArray(arr) ? arr : [])
-        .map((item: any) => {
-          const s = convertGdItem(item, "netease");
-          if (s && s.pic_id) {
-            // DreamMeting pic 直接返回图片（i-meto pic auth 已失效）
-            s._coverUrl = `https://music.3e0.cn/?server=netease&type=pic&id=${encodeURIComponent(s.pic_id)}`;
-          }
-          return s;
-        })
+      songs = (Array.isArray(arr) ? arr : [])
+        .map((item: any) => convertGdItem(item, "netease"))
         .filter(Boolean) as MetingSong[];
-      return songs;
-    } catch {
-      return [];
-    }
+    } catch {}
+
+    // 并行调 i-meto 拿封面 URL（GD API pic 接口返回空）
+    try {
+      const imetoResp = await fetch(
+        `https://api.i-meto.com/meting/api?server=netease&type=search&id=${encodeURIComponent(id)}`
+      );
+      const imetoArr = await imetoResp.json();
+      const picMap = new Map<string, string>();
+      for (const item of (Array.isArray(imetoArr) ? imetoArr : [])) {
+        const m = String(item.url || "").match(/[?&]id=([^&]+)/);
+        if (m && item.pic) picMap.set(decodeURIComponent(m[1]), item.pic);
+      }
+      for (const s of songs) {
+        if (!s._coverUrl) {
+          const cu = picMap.get(s.id);
+          if (cu) s._coverUrl = cu;
+        }
+      }
+    } catch {}
+
+    return songs;
   }
 
   if (type === "lrc") {
@@ -172,8 +184,9 @@ export async function resolveOnlineAudioUrl(platform: string, id: string): Promi
 }
 
 // Pages 版：封面用 GD API pic 接口
-export async function resolveOnlineCoverUrl(platform: string, id: string): Promise<string | undefined> {
-  return `${GD_API}?types=pic&source=${platform}&id=${encodeURIComponent(id)}`;
+export async function resolveOnlineCoverUrl(_platform: string, _id: string): Promise<string | undefined> {
+  // 封面已在搜索时通过 track.coverUrl 填入（DreamMeting pic），这里不再覆盖
+  return undefined;
 }
 
 // 兼容旧接口
